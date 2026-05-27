@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt EPC</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <h1>▦ Gantt EPC</h1>
+        <span class="ms-pill" id="msBadge">—</span>
+    </div>
+    <div class="header-right">
+        <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
+        <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
+    </div>
+</header>
+
+<!-- CONFIG BAR -->
+<div class="config-bar" id="configBar">
+    <label>Token</label>
+    <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
+    <label>URL</label>
+    <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
+    <label>Grupo</label>
+    <input type="text" id="cfgGroup" placeholder="94" data-small />
+    <label>Milestone</label>
+    <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
+    <button class="btn primary" onclick="loadFromAPI()">▶ Carregar</button>
+    <span id="api-status" class="warn">⚠ Configure</span>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+    <span class="toolbar-label">Filtros</span>
+    <input type="date" id="filterFrom" title="Data inicial" />
+    <input type="date" id="filterTo" title="Data final" />
+    <button class="btn" onclick="changeWeek(-7)">◀</button>
+    <button class="btn" onclick="changeWeek(7)">▶</button>
+    <select id="filterStatus">
+        <option value="">Todos status</option>
+        <option value="Andamento">Andamento</option>
+        <option value="Pausada">Pausada</option>
+        <option value="Concluída">Concluída</option>
+        <option value="Aguardando">Aguardando</option>
+    </select>
+    <select id="filterState">
+        <option value="opened">Em aberto</option>
+        <option value="">Todos</option>
+        <option value="closed">Fechadas</option>
+    </select>
+    <input type="text" id="filterSearch" placeholder="Buscar #ID ou título…" style="min-width:170px" />
+    <button class="btn" onclick="resetFilters()">↺ Resetar</button>
+    <span id="filterCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary" id="summary"></div>
+
+<!-- TABLE -->
+<div class="wrap">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:52px">#</th>
+                <th style="min-width:200px">Título</th>
+                <th style="width:72px">Início</th>
+                <th style="width:72px">Fim</th>
+                <th style="width:100px">Status</th>
+                <th style="width:106px" class="progress-col">
+                    Progresso <span style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
+                </th>
+                <th class="bar-th">
+                    <div id="tlHeader" class="tl-header"></div>
+                    Linha do Tempo
+                </th>
+            </tr>
+        </thead>
+        <tbody id="ganttBody">
+            <tr><td colspan="7" class="no-data">Configure a API do GitLab acima.</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
