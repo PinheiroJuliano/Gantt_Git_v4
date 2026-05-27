@@ -24,8 +24,8 @@ const SUM_CLASS = {
   'Aguardando':'s-w',
 };
 
-const JSONBIN_ID  = "SEU_BIN_ID_AQUI";
-const JSONBIN_KEY = "SUA_MASTER_KEY_AQUI";
+const JSONBIN_ID  = "6a17424b21f9ee59d2927ff3";
+const JSONBIN_KEY = "$2a$10$3Gy2uaQPtFI5sYWND4e1nOAhKfNcwnqAt/had4F0jmKdWSSItcaGS";
 const JSONBIN_API = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 
 let allIssues = [];
