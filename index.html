@@ -21,7 +21,7 @@
 </header>
 
 <!-- CONFIG BAR -->
-<div class="config-bar" id="configBar">
+<div class="api-config-bar" id="configBar">
     <label>Token</label>
     <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
     <label>URL</label>
@@ -30,13 +30,11 @@
     <input type="text" id="cfgGroup" placeholder="94" data-small />
     <label>Milestone</label>
     <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
-    <button class="btn primary" onclick="loadFromAPI()">▶ Carregar</button>
-    <span id="api-status" class="warn">⚠ Configure</span>
 </div>
 
 <!-- TOOLBAR -->
-<div class="toolbar">
-    <span class="toolbar-label">Filtros</span>
+<div class="config-bar">
+    <label class="toolbar-label">Filtros</label>
     <input type="date" id="filterFrom" title="Data inicial" />
     <input type="date" id="filterTo" title="Data final" />
     <button class="btn" onclick="changeWeek(-7)">◀</button>
@@ -56,6 +54,8 @@
     <input type="text" id="filterSearch" placeholder="Buscar #ID ou título…" style="min-width:170px" />
     <button class="btn" onclick="resetFilters()">↺ Resetar</button>
     <span id="filterCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
+    <button class="btn primary" onclick="loadFromAPI()">▶ Carregar</button>
+    <span id="api-status" class="warn">⚠ Configure</span>
 </div>
 
 <!-- SUMMARY -->

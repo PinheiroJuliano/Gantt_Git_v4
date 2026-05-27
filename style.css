@@ -83,6 +83,10 @@ header h1 {
 }
 .header-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
+.api-config-bar {
+  display: none;
+}
+
 /* CONFIG BAR */
 .config-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
