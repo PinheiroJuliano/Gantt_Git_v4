@@ -133,6 +133,7 @@ function mapIssue(raw) {
 async function loadFromAPI() {
   const savedCfg = loadCfg();
   const uiCfg = readCfgFromUI();
+
   const cfg = {
     token: uiCfg.token || savedCfg.token,
     url: uiCfg.url || savedCfg.url,
@@ -153,23 +154,78 @@ async function loadFromAPI() {
 
   try {
     const base = `${cfg.url}/api/v4/groups/${cfg.group}/issues`;
+
     const stateFilter = document.getElementById('filterState').value || 'opened';
-    const params = new URLSearchParams({ state: stateFilter, per_page: '100' });
-    if (cfg.milestone) params.append('milestone', cfg.milestone);
 
-    const raw = await fetchAllPages(`${base}?${params.toString()}`, cfg.token);
-    allIssues = raw.map(mapIssue);
-    allIssues.sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999'));
+    const params = new URLSearchParams({
+      state: stateFilter,
+      per_page: '100'
+    });
 
-    document.getElementById('msBadge').textContent = cfg.milestone || 'Todas';
+    // Mantém funcionamento original da milestone
+    if (cfg.milestone) {
+      params.append('milestone', cfg.milestone);
+    }
+
+    // ============================================
+    // LABELS QUE DEVEM SER IGNORADAS
+    // ============================================
+    const ignoredLabels = [
+      'Ready',
+      'Specification'
+    ];
+
+    // Exclui direto na API do GitLab
+    if (ignoredLabels.length) {
+      params.append('not[labels]', ignoredLabels.join(','));
+    }
+
+    // ============================================
+    // CHAMADA ORIGINAL DA API
+    // ============================================
+    const raw = await fetchAllPages(
+      `${base}?${params.toString()}`,
+      cfg.token
+    );
+
+    // ============================================
+    // FILTRO EXTRA LOCAL
+    // (garantia caso API falhe)
+    // ============================================
+    allIssues = raw
+      .map(mapIssue)
+      .filter(issue => {
+        const labels = (issue.labels || []).map(l => l.toLowerCase());
+
+        return !labels.some(label =>
+          ignoredLabels.includes(label)
+        );
+      });
+
+    // Mantém ordenação original
+    allIssues.sort((a, b) =>
+      (a.start || '9999').localeCompare(b.start || '9999')
+    );
+
+    // Mantém comportamento original
+    document.getElementById('msBadge').textContent =
+      cfg.milestone || 'Todas';
+
     const btnReload = document.getElementById('btnReload');
-    if (btnReload) btnReload.style.display = 'inline-block';
-    
+
+    if (btnReload) {
+      btnReload.style.display = 'inline-block';
+    }
+
     setApiStatus(`✅ ${allIssues.length} issues`, 'ok');
+
     setDefaultFilters();
+
     render();
+
   } catch (e) {
     console.error(e);
+
     setApiStatus(`❌ Erro: ${e.message}`, 'err');
   }
 }
