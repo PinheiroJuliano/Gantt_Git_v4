@@ -24,8 +24,9 @@ const SUM_CLASS = {
   'Aguardando':'s-w',
 };
 
-const GITHUB_API = "https://api.github.com/repos/PinheiroJuliano/Cronograma_EPC-v2/contents/database.json";
-let GITHUB_TOKEN = "";
+const JSONBIN_ID  = "SEU_BIN_ID_AQUI";
+const JSONBIN_KEY = "SUA_MASTER_KEY_AQUI";
+const JSONBIN_API = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 
 let allIssues = [];
 let progress  = {};
@@ -567,50 +568,31 @@ window.startDragTouch = function(e, iid) {
 // Função para BUSCAR os dados do arquivo JSON no GitHub
 async function loadCentralData() {
   try {
-    const resp = await fetch(`${GITHUB_API}?t=${Date.now()}`, {
-      headers: { "Authorization": `token ${GITHUB_TOKEN}` }
+    const resp = await fetch(JSONBIN_API + "/latest", {
+      headers: { "X-Master-Key": JSONBIN_KEY }
     });
     if (resp.ok) {
       const data = await resp.json();
-      // O GitHub envia em Base64, o atob() decodifica para string, e o JSON.parse vira objeto
-      const content = JSON.parse(atob(data.content));
-      progress = content; // Atualiza nossa variável global de progresso
+      progress = data.record;
       render();
     }
   } catch (e) {
-    console.error("Erro ao sincronizar com o GitHub:", e);
+    console.error("Erro ao carregar banco central:", e);
   }
 }
 
-// Função para ENVIAR os dados para o arquivo JSON no GitHub
 async function saveToCentralData() {
   try {
-    // 1. Pega o SHA atual (necessário para o GitHub aceitar o update)
-    const getResp = await fetch(GITHUB_API, {
-      headers: { "Authorization": `token ${GITHUB_TOKEN}` }
-    });
-    const fileData = await getResp.json();
-    const currentSha = fileData.sha;
-
-    // 2. Transforma nosso objeto 'progress' em Base64
-    const newContent = btoa(JSON.stringify(progress, null, 2));
-
-    // 3. Faz o PUT para atualizar o arquivo
-    await fetch(GITHUB_API, {
+    await fetch(JSONBIN_API, {
       method: "PUT",
       headers: {
-        "Authorization": `token ${GITHUB_TOKEN}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-Master-Key": JSONBIN_KEY
       },
-      body: JSON.stringify({
-        message: "📊 update: progresso das issues",
-        content: newContent,
-        sha: currentSha
-      })
+      body: JSON.stringify(progress)
     });
-    console.log("Sincronizado com o repositório!");
   } catch (e) {
-    console.error("Erro ao salvar no GitHub:", e);
+    console.error("Erro ao salvar banco central:", e);
   }
 }
 
@@ -619,7 +601,6 @@ async function loadCredentials() {
   // Prioridade 1: configuração embutida no HTML (funciona em qualquer host)
   if (window.__API_CONFIG__) {
     const cfg = window.__API_CONFIG__;
-    if (cfg.githubToken) GITHUB_TOKEN = cfg.githubToken;
     const finalCfg = {
       token:     cfg.token     || '',
       url:       cfg.url       || 'https://gitlab.4mti.com.br',
@@ -636,7 +617,6 @@ async function loadCredentials() {
     const resp = await fetch(`config.json?t=${Date.now()}`);
     if (resp.ok) {
       const cfg = await resp.json();
-      if (cfg.githubToken) GITHUB_TOKEN = cfg.githubToken;
       const finalCfg = {
         token:     cfg.token     || '',
         url:       cfg.url       || 'https://gitlab.4mti.com.br',
