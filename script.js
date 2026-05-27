@@ -616,30 +616,39 @@ async function saveToCentralData() {
 
 // Função para carregar as credenciais do arquivo externo
 async function loadCredentials() {
+  // Prioridade 1: configuração embutida no HTML (funciona em qualquer host)
+  if (window.__API_CONFIG__) {
+    const cfg = window.__API_CONFIG__;
+    if (cfg.githubToken) GITHUB_TOKEN = cfg.githubToken;
+    const finalCfg = {
+      token:     cfg.token     || '',
+      url:       cfg.url       || 'https://gitlab.4mti.com.br',
+      group:     cfg.group     || '',
+      milestone: cfg.milestone || ''
+    };
+    fillCfgUI(finalCfg);
+    localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
+    return finalCfg;
+  }
+
+  // Prioridade 2: arquivo config.json (uso local / Live Server)
   try {
     const resp = await fetch(`config.json?t=${Date.now()}`);
     if (resp.ok) {
       const cfg = await resp.json();
-      
-      // Lê o token do GitHub direto do config.json
-      if (cfg.githubToken) {
-        GITHUB_TOKEN = cfg.githubToken;
-      }
-
+      if (cfg.githubToken) GITHUB_TOKEN = cfg.githubToken;
       const finalCfg = {
-        token: cfg.token || '',
-        url: cfg.url || 'https://gitlab.4mti.com.br',
-        group: cfg.group || '',
+        token:     cfg.token     || '',
+        url:       cfg.url       || 'https://gitlab.4mti.com.br',
+        group:     cfg.group     || '',
         milestone: cfg.milestone || ''
       };
-
       fillCfgUI(finalCfg);
       localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
-      
       return finalCfg;
     }
   } catch (e) {
-    console.error("Erro ao carregar credenciais:", e);
+    console.error("Erro ao carregar config.json:", e);
   }
   return null;
 }
@@ -648,12 +657,14 @@ async function loadCredentials() {
 async function inicializarApp() {
   console.log("Iniciando App...");
   
-  // 1. Carrega o que é imediato
+  // 1. Carrega progresso local imediatamente (sem depender de rede)
   loadProgress();
-  loadCentralData();
 
-  // 2. Aguarda o arquivo de configuração
+  // 2. Aguarda as credenciais PRIMEIRO — o token precisa estar pronto antes de qualquer chamada ao GitHub
   const cfgAtivo = await loadCredentials();
+
+  // 3. Agora que o GITHUB_TOKEN está preenchido, busca o banco central
+  await loadCentralData();
 
   // 3. Só tenta carregar a API se tivermos um token (seja do arquivo ou do que já estava salvo)
   if (cfgAtivo && cfgAtivo.token) {
