@@ -430,6 +430,27 @@ function buildTimeline() {
   }
 }
 
+/**
+ * Cor da barra de progresso de TEMPO (linha do tempo do Gantt).
+ * Regras:
+ *   - Aguardando → cinza (independente dos valores)
+ *   - Pausada    → amarelo
+ *   - Concluída  → verde
+ *   - Atrasada   → vermelho (já tratado pelo caller)
+ *   - média(timePct, progressPct) > 90 → vermelho
+ *   - média(timePct, progressPct) > 60 → laranja
+ *   - caso contrário             → azul
+ */
+function timeBarColor(status, timePct, progressPct) {
+  if (status === 'Aguardando') return 'var(--gray)';
+  if (status === 'Pausada')    return 'var(--amber)';
+  if (status === 'Concluída')  return 'var(--green)';
+  const avg = (timePct + progressPct) / 2;
+  if (avg > 90) return 'var(--red)';
+  if (avg > 60) return 'var(--orange)';
+  return 'var(--blue)';
+}
+
 function pctPos(dateStr) {
   if (!timeline || !dateStr) return null;
   const d = parseD(dateStr);
@@ -480,10 +501,12 @@ function renderRows(issues) {
         fillWidthFactor = Math.max(0, Math.min(1, elapsed / totalDuration));
       }
 
-      const barColor = isCritical ? 'var(--red)' : color;
+      const timePct = Math.round(fillWidthFactor * 100);
+      // Cor dinâmica: atrasada sempre vermelho, demais calculados por média tempo+progresso
+      const barColor = isCritical ? 'var(--red)' : timeBarColor(status, timePct, pct);
       const criticalClass = isCritical ? 'bar-overdue' : '';
       const doneWidth = w * fillWidthFactor; // Largura final da parte preenchida
-      const displayPct = Math.round(fillWidthFactor * 100);
+      const displayPct = timePct;
 
       barHTML = `
         <div class="bar-ghost" style="left:${L}%; width:${w}%; background:${barColor}"></div>
@@ -527,6 +550,9 @@ window.changeStatus = function(iid, val, sel) {
   
   // Atualiza o status sem perguntas nem travas
   progress[iid].status = val;
+
+  // Registra horário da última alteração (ISO 8601, fuso local)
+  progress[iid].updatedAt = new Date().toISOString();
 
   // Se mudar para concluída, o progresso vai para 100%
   if (val === 'Concluída') {
@@ -584,6 +610,7 @@ window.startDrag = function(e, iid) {
   };
 
 const onUp = () => {
+  if (progress[iid]) progress[iid].updatedAt = new Date().toISOString();
   saveProgress(); 
   saveToCentralData(); // <--- Envia para o banco coletivo ao soltar o mouse
   render();
