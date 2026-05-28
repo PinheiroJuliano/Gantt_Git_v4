@@ -221,6 +221,29 @@ async function loadFromAPI() {
 
     setDefaultFilters();
 
+    // Sincroniza status iniciais: para issues sem entrada no JSON,
+    // registra o status inferido do GitLab para que todos vejam desde o início.
+    let needsSync = false;
+    allIssues.forEach(issue => {
+      if (!progress[issue.iid]) {
+        progress[issue.iid] = {
+          pct: issue.apiProgress,
+          status: issue.apiStatus,
+          updatedAt: new Date().toISOString()
+        };
+        needsSync = true;
+      } else if (!progress[issue.iid].status) {
+        // Entrada existe mas sem status — preenche sem sobrescrever pct manual
+        progress[issue.iid].status = issue.apiStatus;
+        progress[issue.iid].updatedAt = progress[issue.iid].updatedAt || new Date().toISOString();
+        needsSync = true;
+      }
+    });
+    if (needsSync) {
+      saveProgress();
+      saveToCentralData();
+    }
+
     render();
 
   } catch (e) {
@@ -431,23 +454,31 @@ function buildTimeline() {
 }
 
 /**
- * Cor da barra de progresso de TEMPO (linha do tempo do Gantt).
- * Regras:
- *   - Aguardando → cinza (independente dos valores)
- *   - Pausada    → amarelo
- *   - Concluída  → verde
- *   - Atrasada   → vermelho (já tratado pelo caller)
- *   - média(timePct, progressPct) > 90 → vermelho
- *   - média(timePct, progressPct) > 60 → laranja
- *   - caso contrário             → azul
+ * Cor da barra de tempo no Gantt — baseada no "gap de saúde":
+ *   gap = timePct - progressPct
+ *
+ *   Quanto maior o gap, mais o tempo avançou sem o progresso acompanhar.
+ *   Ex: timePct=95, pct=95 → gap=0  → azul  (saudável)
+ *       timePct=95, pct=40 → gap=55 → vermelho (crítico)
+ *
+ *   Thresholds:
+ *     gap > 35 → vermelho   (muito atrasado em relação ao tempo)
+ *     gap > 15 → laranja    (atenção)
+ *     gap ≤ 15 → azul       (ok)
+ *
+ *   Status especiais sobrepõem a lógica:
+ *     Aguardando → cinza
+ *     Pausada    → amarelo
+ *     Concluída  → verde
+ *     Atrasada (overdue, tratada pelo caller) → vermelho
  */
 function timeBarColor(status, timePct, progressPct) {
   if (status === 'Aguardando') return 'var(--gray)';
   if (status === 'Pausada')    return 'var(--amber)';
   if (status === 'Concluída')  return 'var(--green)';
-  const avg = (timePct + progressPct) / 2;
-  if (avg > 90) return 'var(--red)';
-  if (avg > 60) return 'var(--orange)';
+  const gap = timePct - progressPct;
+  if (gap > 35) return 'var(--red)';
+  if (gap > 15) return 'var(--orange)';
   return 'var(--blue)';
 }
 
