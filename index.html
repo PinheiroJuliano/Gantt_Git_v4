@@ -14,10 +14,18 @@
     <div class="header-left">
         <h1>▦ Gantt EPC</h1>
         <span class="ms-pill" id="msBadge">—</span>
+        <!-- BREADCRUMB: aparece no drill-down -->
+        <nav class="breadcrumb" id="breadcrumb" style="display:none">
+            <button class="breadcrumb-back" onclick="exitDrill()">← Voltar</button>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-current" id="breadcrumbLabel">—</span>
+        </nav>
     </div>
     <div class="header-right">
         <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
         <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
+        <!-- Botão só visível na tela macro -->
+        <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
     </div>
 </header>
 
@@ -33,8 +41,8 @@
     <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
 </div>
 
-<!-- TOOLBAR -->
-<div class="config-bar">
+<!-- TOOLBAR (issues) -->
+<div class="config-bar" id="issueToolbar">
     <label class="toolbar-label">Filtros</label>
     <input type="date" id="filterFrom" title="Data inicial" />
     <input type="date" id="filterTo" title="Data final" />
@@ -59,11 +67,48 @@
     <span id="api-status" class="warn">⚠ Configure</span>
 </div>
 
+<!-- TOOLBAR (macro milestones) — oculto por padrão -->
+<div class="config-bar" id="macroToolbar" style="display:none">
+    <label class="toolbar-label">Linha do Tempo</label>
+    <input type="date" id="macroFrom" title="Data inicial" />
+    <input type="date" id="macroTo" title="Data final" />
+    <button class="btn" onclick="changeMacroWeek(-30)">◀</button>
+    <button class="btn" onclick="changeMacroWeek(30)">▶</button>
+    <input type="text" id="macroSearch" placeholder="Buscar milestone…" style="min-width:170px" />
+    <button class="btn" onclick="resetMacroFilters()">↺ Resetar</button>
+    <span id="macroCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
+</div>
+
 <!-- SUMMARY -->
 <div class="summary" id="summary"></div>
 
-<!-- TABLE -->
-<div class="wrap">
+<!-- MACRO VIEW: tabela de milestones internas -->
+<div class="wrap" id="macroWrap" style="display:none">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:32px"></th>
+                <th style="min-width:280px">Milestone</th>
+                <th style="width:72px">Início</th>
+                <th style="width:72px">Fim</th>
+                <th style="width:100px">Status</th>
+                <th style="width:106px" class="progress-col">
+                    Progresso <span style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
+                </th>
+                <th class="bar-th">
+                    <div id="macroTlHeader" class="tl-header"></div>
+                    Linha do Tempo
+                </th>
+            </tr>
+        </thead>
+        <tbody id="macroBody">
+            <tr><td colspan="7" class="no-data">Nenhuma milestone cadastrada. Clique em ⊞ Milestones.</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ISSUES VIEW: tabela de issues (modo drill-down ou modo normal) -->
+<div class="wrap" id="issuesWrap">
     <table>
         <thead>
             <tr>
@@ -87,8 +132,83 @@
     </table>
 </div>
 
+<!-- =============================================
+     MODAL: Gestão de Milestones Internas
+     ============================================= -->
+<div class="modal-backdrop" id="msModalBackdrop" onclick="closeMsModal()" style="display:none"></div>
+<div class="modal" id="msModal" style="display:none">
+    <div class="modal-header">
+        <h2 class="modal-title">⊞ Milestones Internas</h2>
+        <button class="modal-close" onclick="closeMsModal()">✕</button>
+    </div>
+
+    <!-- Lista de milestones cadastradas -->
+    <div class="modal-section" id="msList">
+        <p class="modal-empty" id="msListEmpty">Nenhuma milestone cadastrada ainda.</p>
+    </div>
+
+    <!-- Formulário: novo / editar -->
+    <div class="modal-section modal-form-section" id="msForm">
+        <div class="modal-form-title" id="msFormTitle">Nova Milestone</div>
+
+        <div class="form-row">
+            <div class="form-group" style="flex:2">
+                <label class="form-label">Nome *</label>
+                <input type="text" id="msName" placeholder="Ex: Implementar leitura do catálogo Porsche" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cor</label>
+                <input type="color" id="msColor" value="#2e6fcc" style="width:100%;height:34px;padding:2px 4px;cursor:pointer" />
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Início *</label>
+                <input type="date" id="msStart" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Fim *</label>
+                <input type="date" id="msEnd" />
+            </div>
+            <div class="form-group" style="flex:0 0 110px">
+                <label class="form-label">Status</label>
+                <select id="msStatus">
+                    <option value="Não iniciada">Não iniciada</option>
+                    <option value="Andamento">Andamento</option>
+                    <option value="Concluída">Concluída</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Multi-select de issues -->
+        <div class="form-group">
+            <label class="form-label">Issues vinculadas</label>
+            <div class="issue-picker-bar">
+                <input type="text" id="issuePickerSearch" placeholder="Filtrar por #ID ou título…" oninput="filterIssuePicker()" />
+                <span id="issuePickerCount" class="picker-count">0 selecionadas</span>
+            </div>
+            <div class="issue-picker" id="issuePicker">
+                <p class="picker-empty">Carregue as issues da API primeiro (botão ▶ Carregar).</p>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn" onclick="cancelMsForm()">Cancelar</button>
+            <button class="btn primary" onclick="saveMilestone()">Salvar milestone</button>
+        </div>
+    </div>
+</div>
+
+<!-- =============================================
+     VIEW SWITCHER (FAB)
+     ============================================= -->
+<div class="view-fab" id="viewFab">
+    <button class="fab-btn active" id="fabMacro" onclick="switchView('macro')" title="Visão macro (milestones)">⊟ Macro</button>
+    <button class="fab-btn" id="fabIssues" onclick="switchView('issues')" title="Visão de issues">≡ Issues</button>
+</div>
+
 <script>
-  // Configuração central — edite aqui para trocar tokens sem mexer no script.js
   window.__API_CONFIG__ = {
     token:        "glpat-JfjiRCcpVzfMx3VSLofR",
     url:          "https://gitlab.4mti.com.br",

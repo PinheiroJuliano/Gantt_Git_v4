@@ -1,63 +1,64 @@
 'use strict';
 
-/* CONSTANTS & STATE */
+/* ─── CONSTANTS & STATE ─────────────────────────────────────────────────── */
 const STORE_CFG  = 'gantt_cfg_v2';
 const STORE_PROG = 'gantt_prog_v2';
 const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
 
 const STATUS_COLORS = {
-  'Andamento': 'var(--blue)',
-  'Pausada':   'var(--amber)',
-  'Concluída': 'var(--green)',
-  'Aguardando':'var(--gray)',
+  'Andamento': 'var(--blue)',  'Pausada':   'var(--amber)',
+  'Concluída': 'var(--green)', 'Aguardando':'var(--gray)',
+  'Não iniciada': 'var(--gray)',
 };
 const STATUS_CLASS = {
-  'Andamento': 'sb-a',
-  'Pausada':   'sb-p',
-  'Concluída': 'sb-c',
-  'Aguardando':'sb-w',
+  'Andamento': 'sb-a', 'Pausada': 'sb-p',
+  'Concluída': 'sb-c', 'Aguardando':'sb-w', 'Não iniciada':'sb-w',
 };
 const SUM_CLASS = {
-  'Andamento': 's-a',
-  'Pausada':   's-p',
-  'Concluída': 's-c',
-  'Aguardando':'s-w',
+  'Andamento': 's-a', 'Pausada': 's-p',
+  'Concluída': 's-c', 'Aguardando':'s-w',
 };
 
 const JSONBIN_ID  = "6a17424b21f9ee59d2927ff3";
 const JSONBIN_KEY = "$2a$10$3Gy2uaQPtFI5sYWND4e1nOAhKfNcwnqAt/had4F0jmKdWSSItcaGS";
 const JSONBIN_API = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 
-let allIssues = [];
-let progress  = {};
-let timeline  = null;
+let allIssues    = [];
+let progress     = {};
+let internalMilestones = [];   // milestones cadastradas internamente
+let timeline     = null;
+let macroTimeline = null;
+
+// Modo de visualização: 'macro' | 'issues' | 'drill'
+let currentView  = 'macro';
+let drillMsId    = null;       // ID da milestone em drill-down
+
+// Estado do modal
+let editingMsId  = null;
+let selectedIssueIids = new Set();
 
 const DEFAULT_CFG = {
   token: '', url: 'https://gitlab.4mti.com.br', group: '94',
   milestone: 'Cliente) Porto Seguro - EPC'
 };
 
-/* CONFIG */
+/* ─── CONFIG ─────────────────────────────────────────────────────────────── */
 function loadCfg() {
-  if (window.__API_CONFIG__ && window.__API_CONFIG__.token) {
-    return { ...DEFAULT_CFG, ...window.__API_CONFIG__ };
-  }
+  if (window.__API_CONFIG__?.token) return { ...DEFAULT_CFG, ...window.__API_CONFIG__ };
   try {
     const local = JSON.parse(localStorage.getItem(STORE_CFG) || '{}');
     if (local.token) return { ...DEFAULT_CFG, ...local };
-  } catch (e) {}
+  } catch(e) {}
   return { ...DEFAULT_CFG };
 }
-
 function readCfgFromUI() {
   return {
-    token: document.getElementById('cfgToken').value.trim(),
-    url: document.getElementById('cfgUrl').value.trim().replace(/\/$/, ''),
-    group: document.getElementById('cfgGroup').value.trim(),
+    token:     document.getElementById('cfgToken').value.trim(),
+    url:       document.getElementById('cfgUrl').value.trim().replace(/\/$/, ''),
+    group:     document.getElementById('cfgGroup').value.trim(),
     milestone: document.getElementById('cfgMilestone').value.trim(),
   };
 }
-
 function fillCfgUI(cfg) {
   document.getElementById('cfgToken').value     = cfg.token     || '';
   document.getElementById('cfgUrl').value       = cfg.url       || DEFAULT_CFG.url;
@@ -65,7 +66,7 @@ function fillCfgUI(cfg) {
   document.getElementById('cfgMilestone').value = cfg.milestone || DEFAULT_CFG.milestone;
 }
 
-/* PROGRESS STORE */
+/* ─── PROGRESS STORE ─────────────────────────────────────────────────────── */
 function loadProgress() {
   try { progress = JSON.parse(localStorage.getItem(STORE_PROG)||'{}'); }
   catch { progress = {}; }
@@ -80,7 +81,110 @@ function updateSaveIndicator() {
   if (el) el.innerHTML = n ? `<span class="save-dot"></span>${n} issue(s) com progresso salvo` : '';
 }
 
-/* API */
+/* ─── INTERNAL MILESTONES STORE ─────────────────────────────────────────── */
+function saveMilestonesLocal() {
+  localStorage.setItem('gantt_milestones_v1', JSON.stringify(internalMilestones));
+}
+function loadMilestonesLocal() {
+  try { internalMilestones = JSON.parse(localStorage.getItem('gantt_milestones_v1') || '[]'); }
+  catch { internalMilestones = []; }
+}
+
+/* ─── JSONBIN ─────────────────────────────────────────────────────────────── */
+async function loadCentralData() {
+  try {
+    const resp = await fetch(JSONBIN_API + "/latest", {
+      headers: { "X-Master-Key": JSONBIN_KEY }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const rec = data.record || {};
+      // Suporte ao novo formato: { progress: {}, milestones: [] }
+      if (rec.progress !== undefined) {
+        progress = rec.progress || {};
+        internalMilestones = rec.milestones || internalMilestones;
+        saveMilestonesLocal();
+      } else {
+        // formato legado: apenas progress
+        progress = rec;
+      }
+      render();
+    }
+  } catch(e) { console.error("Erro ao carregar banco central:", e); }
+}
+
+async function saveToCentralData() {
+  try {
+    await fetch(JSONBIN_API, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_KEY },
+      body: JSON.stringify({ progress, milestones: internalMilestones })
+    });
+  } catch(e) { console.error("Erro ao salvar banco central:", e); }
+}
+
+/* ─── VIEW SWITCHER ─────────────────────────────────────────────────────── */
+window.switchView = function(view) {
+  currentView = view;
+  drillMsId   = null;
+
+  const macroWrap   = document.getElementById('macroWrap');
+  const issuesWrap  = document.getElementById('issuesWrap');
+  const macroTb     = document.getElementById('macroToolbar');
+  const issueTb     = document.getElementById('issueToolbar');
+  const breadcrumb  = document.getElementById('breadcrumb');
+  const btnMs       = document.getElementById('btnMilestones');
+  const fabMacro    = document.getElementById('fabMacro');
+  const fabIssues   = document.getElementById('fabIssues');
+
+  if (view === 'macro') {
+    macroWrap.style.display  = '';
+    issuesWrap.style.display = 'none';
+    macroTb.style.display    = '';
+    issueTb.style.display    = 'none';
+    breadcrumb.style.display = 'none';
+    btnMs.style.display      = '';
+    fabMacro.classList.add('active');
+    fabIssues.classList.remove('active');
+    renderMacro();
+  } else if (view === 'issues') {
+    macroWrap.style.display  = 'none';
+    issuesWrap.style.display = '';
+    macroTb.style.display    = 'none';
+    issueTb.style.display    = '';
+    breadcrumb.style.display = 'none';
+    btnMs.style.display      = '';
+    fabMacro.classList.remove('active');
+    fabIssues.classList.add('active');
+    render();
+  }
+};
+
+window.enterDrill = function(msId) {
+  const ms = internalMilestones.find(m => m.id === msId);
+  if (!ms) return;
+
+  currentView = 'drill';
+  drillMsId   = msId;
+
+  document.getElementById('macroWrap').style.display  = 'none';
+  document.getElementById('issuesWrap').style.display = '';
+  document.getElementById('macroToolbar').style.display = 'none';
+  document.getElementById('issueToolbar').style.display = '';
+  document.getElementById('breadcrumb').style.display  = 'flex';
+  document.getElementById('breadcrumbLabel').textContent = ms.name;
+  document.getElementById('btnMilestones').style.display = 'none';
+  document.getElementById('fabMacro').classList.remove('active');
+  document.getElementById('fabIssues').classList.remove('active');
+
+  render();
+};
+
+window.exitDrill = function() {
+  switchView('macro');
+};
+
+/* ─── API ─────────────────────────────────────────────────────────────────── */
 function setApiStatus(msg, cls) {
   const el = document.getElementById('api-status');
   if (el) { el.textContent = msg; el.className = cls; }
@@ -108,7 +212,6 @@ function inferStatus(issue) {
   if (labels.some(l => ['aguardando','waiting','pendente'].includes(l))) return 'Aguardando';
   return 'Andamento';
 }
-
 function inferProgress(issue) {
   const desc = issue.description || '';
   const done  = (desc.match(/-\s*\[x\]/gi)||[]).length;
@@ -118,7 +221,6 @@ function inferProgress(issue) {
   if (m) return Math.min(100, parseInt(m[1]));
   return issue.state === 'closed' ? 100 : 0;
 }
-
 function mapIssue(raw) {
   const ms = raw.milestone || {};
   const start = ms.start_date || raw.created_at?.slice(0,10);
@@ -132,161 +234,90 @@ function mapIssue(raw) {
 
 async function loadFromAPI() {
   const savedCfg = loadCfg();
-  const uiCfg = readCfgFromUI();
-
+  const uiCfg    = readCfgFromUI();
   const cfg = {
-    token: uiCfg.token || savedCfg.token,
-    url: uiCfg.url || savedCfg.url,
-    group: uiCfg.group || savedCfg.group,
-    milestone: uiCfg.milestone || savedCfg.milestone
+    token:     uiCfg.token     || savedCfg.token,
+    url:       uiCfg.url       || savedCfg.url,
+    group:     uiCfg.group     || savedCfg.group,
+    milestone: uiCfg.milestone || savedCfg.milestone,
   };
-
   if (!cfg.token || !cfg.url || !cfg.group) {
-    setApiStatus('⚠ Token ou IDs ausentes', 'warn');
-    return;
+    setApiStatus('⚠ Token ou IDs ausentes', 'warn'); return;
   }
-
-  if (!window.__API_CONFIG__) {
-    localStorage.setItem(STORE_CFG, JSON.stringify(cfg));
-  }
+  if (!window.__API_CONFIG__) localStorage.setItem(STORE_CFG, JSON.stringify(cfg));
 
   setApiStatus('⏳ Carregando...', 'loading');
-
   try {
-    const base = `${cfg.url}/api/v4/groups/${cfg.group}/issues`;
-
     const stateFilter = document.getElementById('filterState').value || 'opened';
+    const params = new URLSearchParams({ state: stateFilter, per_page: '100' });
+    if (cfg.milestone) params.append('milestone', cfg.milestone);
+    const ignoredLabels = ['Ready','Specification'];
+    if (ignoredLabels.length) params.append('not[labels]', ignoredLabels.join(','));
 
-    const params = new URLSearchParams({
-      state: stateFilter,
-      per_page: '100'
-    });
-
-    // Mantém funcionamento original da milestone
-    if (cfg.milestone) {
-      params.append('milestone', cfg.milestone);
-    }
-
-    // ============================================
-    // LABELS QUE DEVEM SER IGNORADAS
-    // ============================================
-    const ignoredLabels = [
-      'Ready',
-      'Specification'
-    ];
-
-    // Exclui direto na API do GitLab
-    if (ignoredLabels.length) {
-      params.append('not[labels]', ignoredLabels.join(','));
-    }
-
-    // ============================================
-    // CHAMADA ORIGINAL DA API
-    // ============================================
     const raw = await fetchAllPages(
-      `${base}?${params.toString()}`,
+      `${cfg.url}/api/v4/groups/${cfg.group}/issues?${params.toString()}`,
       cfg.token
     );
+    allIssues = raw.map(mapIssue)
+      .filter(i => !i.labels.some(l => ignoredLabels.includes(l)));
+    allIssues.sort((a,b) => (a.start||'9999').localeCompare(b.start||'9999'));
 
-    // ============================================
-    // FILTRO EXTRA LOCAL
-    // (garantia caso API falhe)
-    // ============================================
-    allIssues = raw
-      .map(mapIssue)
-      .filter(issue => {
-        const labels = (issue.labels || []).map(l => l.toLowerCase());
-
-        return !labels.some(label =>
-          ignoredLabels.includes(label)
-        );
-      });
-
-    // Mantém ordenação original
-    allIssues.sort((a, b) =>
-      (a.start || '9999').localeCompare(b.start || '9999')
-    );
-
-    // Mantém comportamento original
-    document.getElementById('msBadge').textContent =
-      cfg.milestone || 'Todas';
-
-    const btnReload = document.getElementById('btnReload');
-
-    if (btnReload) {
-      btnReload.style.display = 'inline-block';
-    }
-
+    document.getElementById('msBadge').textContent = cfg.milestone || 'Todas';
+    document.getElementById('btnReload').style.display = 'inline-block';
     setApiStatus(`✅ ${allIssues.length} issues`, 'ok');
 
     setDefaultFilters();
 
-    // Sincroniza status iniciais: para issues sem entrada no JSON,
-    // registra o status inferido do GitLab para que todos vejam desde o início.
     let needsSync = false;
     allIssues.forEach(issue => {
       if (!progress[issue.iid]) {
-        progress[issue.iid] = {
-          pct: issue.apiProgress,
-          status: issue.apiStatus,
-          updatedAt: new Date().toISOString()
-        };
+        progress[issue.iid] = { pct: issue.apiProgress, status: issue.apiStatus, updatedAt: new Date().toISOString() };
         needsSync = true;
       } else if (!progress[issue.iid].status) {
-        // Entrada existe mas sem status — preenche sem sobrescrever pct manual
         progress[issue.iid].status = issue.apiStatus;
-        progress[issue.iid].updatedAt = progress[issue.iid].updatedAt || new Date().toISOString();
         needsSync = true;
       }
     });
-    if (needsSync) {
-      saveProgress();
-      saveToCentralData();
-    }
+    if (needsSync) { saveProgress(); saveToCentralData(); }
+
+    // Atualiza picker do modal se estiver aberto
+    if (document.getElementById('msModal').style.display !== 'none') populateIssuePicker();
 
     render();
+    if (currentView === 'macro') renderMacro();
 
-  } catch (e) {
-    console.error(e);
-
-    setApiStatus(`❌ Erro: ${e.message}`, 'err');
+  } catch(e) {
+    console.error(e); setApiStatus(`❌ Erro: ${e.message}`, 'err');
   }
 }
 
-/* FILTERS */
+/* ─── FILTERS ─────────────────────────────────────────────────────────────── */
 function setDefaultFilters() {
   const now = new Date(TODAY);
-  
-  // Identifica o dia da semana (0 = Domingo, 1 = Segunda...)
-  const dayOfWeek = now.getDay(); 
-  
-  // Calcula o início da semana (Domingo)
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - dayOfWeek);
-  
-  // Calcula o fim da semana (Sábado)
-  const endOfWeek = new Date(now);
-  endOfWeek.setDate(now.getDate() + (6 - dayOfWeek));
-
-  // Aplica aos inputs de data
-  document.getElementById('filterFrom').value = fmt(startOfWeek);
-  document.getElementById('filterTo').value   = fmt(endOfWeek);
+  const day = now.getDay();
+  const s   = new Date(now); s.setDate(now.getDate() - day);
+  const e   = new Date(now); e.setDate(now.getDate() + (6 - day));
+  document.getElementById('filterFrom').value = fmt(s);
+  document.getElementById('filterTo').value   = fmt(e);
 }
-
 function resetFilters() {
   document.getElementById('filterSearch').value = '';
   document.getElementById('filterStatus').value = '';
   setDefaultFilters();
   render();
 }
-
 function applyFilters() {
+  let issues = [...allIssues];
+  if (currentView === 'drill' && drillMsId !== null) {
+    const ms = internalMilestones.find(m => m.id === drillMsId);
+    const iids = new Set((ms?.issueIids || []).map(Number));
+    issues = issues.filter(i => iids.has(Number(i.iid)));
+  }
   const from   = document.getElementById('filterFrom').value;
   const to     = document.getElementById('filterTo').value;
   const status = document.getElementById('filterStatus').value;
   const search = document.getElementById('filterSearch').value.toLowerCase();
-
-  return allIssues.filter(i => {
+  return issues.filter(i => {
     const iStatus = effectiveStatus(i);
     if (status && iStatus !== status) return false;
     if (search && !String(i.iid).includes(search) && !i.title.toLowerCase().includes(search)) return false;
@@ -296,95 +327,104 @@ function applyFilters() {
   });
 }
 
-/* HELPERS */
-
-// Helper para achar a linha da tabela rapidamente
-function rowOf(iid) {
-  return document.querySelector(`tr[data-iid="${iid}"]`);
+/* ─── MACRO FILTERS ─────────────────────────────────────────────────────── */
+function setDefaultMacroFilters() {
+  if (!internalMilestones.length) return;
+  const dates = internalMilestones.flatMap(m => [m.start, m.end].filter(Boolean));
+  if (!dates.length) return;
+  const min = dates.reduce((a,b) => a < b ? a : b);
+  const max = dates.reduce((a,b) => a > b ? a : b);
+  document.getElementById('macroFrom').value = min;
+  document.getElementById('macroTo').value   = max;
+}
+window.resetMacroFilters = function() {
+  document.getElementById('macroSearch').value = '';
+  setDefaultMacroFilters();
+  renderMacro();
+};
+window.changeMacroWeek = function(days) {
+  const f = document.getElementById('macroFrom');
+  const t = document.getElementById('macroTo');
+  let d0 = parseD(f.value), d1 = parseD(t.value);
+  d0.setDate(d0.getDate() + days); d1.setDate(d1.getDate() + days);
+  f.value = fmt(d0); t.value = fmt(d1);
+  renderMacro();
+};
+function applyMacroFilters() {
+  const search = document.getElementById('macroSearch').value.toLowerCase();
+  return internalMilestones.filter(m => !search || m.name.toLowerCase().includes(search));
 }
 
-// Atualiza apenas a barrinha de progresso manual durante o movimento (fica mais liso)
-function updateProgUI_Minimal(row, pct, status) {
-  if (!row) return;
-  const fill = row.querySelector('.prog-fill');
-  const label = row.querySelector('.prog-label');
-  const color = STATUS_COLORS[status || 'Andamento'] || 'var(--blue)';
-  
-  if (fill) {
-    fill.style.width = pct + '%';
-    fill.style.background = color;
-  }
-  if (label) label.textContent = pct + '%';
-}
-
+/* ─── HELPERS ─────────────────────────────────────────────────────────────── */
 window.changeWeek = function(days) {
   const fFrom = document.getElementById('filterFrom');
-  const fTo = document.getElementById('filterTo');
-  
-  let d0 = parseD(fFrom.value);
-  let d1 = parseD(fTo.value);
-  
-  d0.setDate(d0.getDate() + days);
-  d1.setDate(d1.getDate() + days);
-  
-  fFrom.value = fmt(d0);
-  fTo.value = fmt(d1);
-  
-  render(); // Re-renderiza com as novas datas
+  const fTo   = document.getElementById('filterTo');
+  let d0 = parseD(fFrom.value), d1 = parseD(fTo.value);
+  d0.setDate(d0.getDate() + days); d1.setDate(d1.getDate() + days);
+  fFrom.value = fmt(d0); fTo.value = fmt(d1);
+  render();
 };
-
 function getWeekNumber(d) {
   d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return weekNo;
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+  const y = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-y)/86400000)+1)/7);
 }
-
-function fmt(d) { return d.toISOString().slice(0,10); }
+function fmt(d)   { return d.toISOString().slice(0,10); }
 function parseD(s) {
-  if (!s) return null;
+  if (!s) return new Date();
   const [y,m,d] = s.split('-').map(Number);
-  const dt = new Date(y, m-1, d); dt.setHours(0,0,0,0); return dt;
+  const dt = new Date(y,m-1,d); dt.setHours(0,0,0,0); return dt;
 }
 function fmtBR(s) {
   if (!s) return '—';
-  return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  return new Date(s+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
 }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function effectivePct(issue) { return progress[issue.iid]?.pct ?? issue.apiProgress; }
-function effectiveStatus(issue) { return progress[issue.iid]?.status ?? issue.apiStatus; }
+function effectivePct(issue)    { return progress[issue.iid]?.pct    ?? issue.apiProgress; }
+function effectiveStatus(issue) { return progress[issue.iid]?.status ?? issue.apiStatus;   }
+function rowOf(iid)             { return document.querySelector(`tr[data-iid="${iid}"]`); }
+function updateProgUI_Minimal(row, pct, status) {
+  if (!row) return;
+  const fill  = row.querySelector('.prog-fill');
+  const label = row.querySelector('.prog-label');
+  const color = STATUS_COLORS[status||'Andamento']||'var(--blue)';
+  if (fill)  { fill.style.width = pct+'%'; fill.style.background = color; }
+  if (label) label.textContent = pct+'%';
+}
 
-/* RENDER */
+/* ─── RENDER (ISSUES) ────────────────────────────────────────────────────── */
 function render() {
+  if (currentView === 'macro') { renderMacro(); return; }
   const issues = applyFilters();
-  
-  // Atualiza contagem
-  document.getElementById('filterCount').textContent =
-    issues.length < allIssues.length ? `${issues.length} / ${allIssues.length}` : `${issues.length} issues`;
+  const countEl = document.getElementById('filterCount');
+  if (countEl) countEl.textContent = issues.length < allIssues.length
+    ? `${issues.length} / ${allIssues.length}` : `${issues.length} issues`;
 
-  // Atualiza o Badge da Milestone com o número da semana
   const msBadge = document.getElementById('msBadge');
-  const currentWeek = getWeekNumber(TODAY);
-  const savedCfg = loadCfg(); 
-  msBadge.textContent = `${savedCfg.milestone || 'Geral'} | Semana ${currentWeek}`;
+  if (currentView === 'drill' && drillMsId) {
+    const ms = internalMilestones.find(m => m.id === drillMsId);
+    msBadge.textContent = ms ? ms.name : '—';
+  } else {
+    const savedCfg = loadCfg();
+    msBadge.textContent = `${savedCfg.milestone||'Geral'} | Semana ${getWeekNumber(TODAY)}`;
+  }
 
   renderSummary(issues);
-  buildTimeline();
+  buildTimeline('filterFrom','filterTo','tlHeader');
   renderRows(issues);
 }
 
 function renderSummary(issues) {
-  const counts = {};
-  let totalPct = 0;
+  const counts = {}; let totalPct = 0;
   issues.forEach(i => {
     const s = effectiveStatus(i);
     counts[s] = (counts[s]||0)+1;
     totalPct += effectivePct(i);
   });
-  const avg = issues.length ? Math.round(totalPct / issues.length) : 0;
+  const avg = issues.length ? Math.round(totalPct/issues.length) : 0;
   const order = ['Andamento','Concluída','Pausada','Aguardando'];
   let html = order.map(s => counts[s]
     ? `<div class="sum-card ${SUM_CLASS[s]}"><span class="val">${counts[s]}</span> ${s}</div>` : '').join('');
@@ -392,100 +432,95 @@ function renderSummary(issues) {
   document.getElementById('summary').innerHTML = html;
 }
 
-function buildTimeline() {
-  const from = document.getElementById('filterFrom').value;
-  const to = document.getElementById('filterTo').value;
-  
-  if (!from || !to) { 
-    timeline = null; 
-    return; 
+function buildTimeline(fromId, toId, headerId) {
+  const from = document.getElementById(fromId)?.value;
+  const to   = document.getElementById(toId)?.value;
+  if (!from || !to) {
+    if (fromId === 'filterFrom') timeline = null;
+    else macroTimeline = null;
+    return;
   }
+  const t0   = parseD(from);
+  const t1   = parseD(to);
+  const span = Math.max(1, Math.round((t1-t0)/86400000));
+  const tl   = { t0, t1, span };
+  if (fromId === 'filterFrom') timeline = tl; else macroTimeline = tl;
 
-  const t0 = parseD(from);
-  const t1 = parseD(to);
-  
-  // Cálculo do span garantindo que não seja zero para evitar erros matemáticos
-  const span = Math.max(1, Math.round((t1 - t0) / 86400000));
-  timeline = { t0, t1, span };
-
-  const hdr = document.getElementById('tlHeader');
+  const hdr = document.getElementById(headerId);
+  if (!hdr) return;
   hdr.innerHTML = '';
 
   const dayStep = span > 60 ? 7 : 1;
-
   for (let i = 0; i <= span; i += dayStep) {
-    const current = new Date(t0);
-    current.setDate(t0.getDate() + i);
-    
-    const pct = (i / span) * 100;
-    
+    const cur = new Date(t0); cur.setDate(t0.getDate()+i);
+    const pct = (i/span)*100;
     const tick = document.createElement('div');
     tick.className = 'tl-tick';
-    tick.style.left = pct + '%';
-    
-    // Ajuste para o texto do último dia não vazar à direita
-    if (i + dayStep > span) {
-        tick.style.transform = 'translateX(-100%)';
-        tick.style.borderLeft = 'none';
-        tick.style.textAlign = 'right';
+    tick.style.left = pct+'%';
+    if (i+dayStep > span) {
+      tick.style.transform = 'translateX(-100%)';
+      tick.style.borderLeft = 'none';
+      tick.style.textAlign = 'right';
     }
-
-    tick.textContent = current.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    tick.textContent = cur.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
     hdr.appendChild(tick);
   }
-
-  // Ajustar o tamanho da grade no CSS dinamicamente
-  const tableCells = document.querySelectorAll('.bar-cell-td');
-  const columnWidth = (dayStep / span) * 100;
-  
-  tableCells.forEach(cell => {
-    cell.style.backgroundSize = `${columnWidth}% 100%`;
-    cell.style.backgroundPosition = '0 0';
-  });
-
-  // Linha de "Hoje"
   if (TODAY >= t0 && TODAY <= t1) {
-    const pct = ((TODAY - t0) / (t1 - t0)) * 100;
-    hdr.insertAdjacentHTML('beforeend', `
-      <div class="today-line" style="left:${pct}%"></div>
-      <div class="today-lbl" style="left:${pct}%; z-index:11">hoje</div>
-    `);
+    const pct = ((TODAY-t0)/(t1-t0))*100;
+    hdr.insertAdjacentHTML('beforeend',
+      `<div class="today-line" style="left:${pct}%"></div>
+       <div class="today-lbl" style="left:${pct}%;z-index:11">hoje</div>`);
   }
 }
 
-/**
- * Cor da barra de tempo no Gantt — baseada no "gap de saúde":
- *   gap = timePct - progressPct
- *
- *   Quanto maior o gap, mais o tempo avançou sem o progresso acompanhar.
- *   Ex: timePct=95, pct=95 → gap=0  → azul  (saudável)
- *       timePct=95, pct=40 → gap=55 → vermelho (crítico)
- *
- *   Thresholds:
- *     gap > 35 → vermelho   (muito atrasado em relação ao tempo)
- *     gap > 15 → laranja    (atenção)
- *     gap ≤ 15 → azul       (ok)
- *
- *   Status especiais sobrepõem a lógica:
- *     Aguardando → cinza
- *     Pausada    → amarelo
- *     Concluída  → verde
- *     Atrasada (overdue, tratada pelo caller) → vermelho
- */
 function timeBarColor(status, timePct, progressPct) {
-  if (status === 'Aguardando') return 'var(--gray)';
-  if (status === 'Pausada')    return 'var(--amber)';
-  if (status === 'Concluída')  return 'var(--green)';
+  if (status==='Aguardando')   return 'var(--gray)';
+  if (status==='Pausada')      return 'var(--amber)';
+  if (status==='Concluída')    return 'var(--green)';
+  if (status==='Não iniciada') return 'var(--gray)';
   const gap = timePct - progressPct;
-  if (gap > 35) return 'var(--red)';
-  if (gap > 15) return 'var(--orange)';
+  if (gap>35) return 'var(--red)';
+  if (gap>15) return 'var(--orange)';
   return 'var(--blue)';
 }
 
-function pctPos(dateStr) {
-  if (!timeline || !dateStr) return null;
+function pctPosInTl(dateStr, tl) {
+  if (!tl || !dateStr) return null;
   const d = parseD(dateStr);
-  return Math.max(0, Math.min(100, (d - timeline.t0) / (timeline.t1 - timeline.t0) * 100));
+  return Math.max(0, Math.min(100, (d-tl.t0)/(tl.t1-tl.t0)*100));
+}
+function pctPos(dateStr) { return pctPosInTl(dateStr, timeline); }
+
+function buildBarHTML(start, end, status, pct, tl, isOverdue) {
+  const L = pctPosInTl(start, tl);
+  const R = pctPosInTl(end,   tl);
+  if (L === null || R === null || R <= L) {
+    if (start) {
+      const l = pctPosInTl(start, tl);
+      if (l !== null) {
+        const color = STATUS_COLORS[status]||'var(--gray)';
+        return `<div class="bar-ghost" style="left:${l}%;width:2%;min-width:4px;background:${color}"></div>`;
+      }
+    }
+    return '';
+  }
+  const w = R - L;
+  let fillFactor = 0, isCritical = false;
+  if (isOverdue) { fillFactor = 1; isCritical = true; }
+  else if (status === 'Concluída') { fillFactor = 1; }
+  else {
+    const t0 = parseD(start), t1 = parseD(end);
+    fillFactor = Math.max(0, Math.min(1, (TODAY-t0)/(t1-t0)));
+  }
+  const timePct  = Math.round(fillFactor*100);
+  const barColor = isCritical ? 'var(--red)' : timeBarColor(status, timePct, pct);
+  const critCls  = isCritical ? 'bar-overdue' : '';
+  const doneW    = w * fillFactor;
+  return `
+    <div class="bar-ghost" style="left:${L}%;width:${w}%;background:${barColor}"></div>
+    <div class="bar-done ${critCls}" style="left:${L}%;width:${doneW}%;background:${barColor}"></div>
+    ${timePct > 0 ? `<div class="bar-lbl" style="left:${L+doneW-1}%">${timePct}%</div>` : ''}
+  `;
 }
 
 function renderRows(issues) {
@@ -494,78 +529,30 @@ function renderRows(issues) {
     body.innerHTML = '<tr><td colspan="7" class="no-data">Nenhuma issue nos filtros aplicados.</td></tr>';
     return;
   }
-
   const todayStr = fmt(TODAY);
-
   body.innerHTML = issues.map(issue => {
-    const status = effectiveStatus(issue);
-    const pct = effectivePct(issue); // Progresso manual (opcional se quiser exibir no label)
-    const color = STATUS_COLORS[status] || 'var(--gray)';
-    const sClass = STATUS_CLASS[status] || 'sb-w';
-    
-    // Identifica se está atrasada (passou do fim e não está concluída)
+    const status   = effectiveStatus(issue);
+    const pct      = effectivePct(issue);
+    const color    = STATUS_COLORS[status]||'var(--gray)';
+    const sClass   = STATUS_CLASS[status]||'sb-w';
     const isOverdue = issue.end && issue.end < todayStr && status !== 'Concluída';
-
-    let barHTML = '';
-    const L = pctPos(issue.start);
-    const R = pctPos(issue.end);
-
-    if (L !== null && R !== null && R > L) {
-      const w = R - L; // Largura total da barra (espaço entre start e end)
-      let fillWidthFactor = 0; // 0 a 1 (percentual de preenchimento)
-      let isCritical = false;
-
-      // --- Lógica de Preenchimento da Barra ---
-      if (isOverdue) {
-        fillWidthFactor = 1; // 100% preenchida
-        isCritical = true;
-      } else if (status === 'Concluída') {
-        fillWidthFactor = 1; // 100% preenchida
-      } else {
-        // Cálculo de progresso temporal (quanto tempo já passou)
-        const t0 = parseD(issue.start);
-        const t1 = parseD(issue.end);
-        const totalDuration = t1 - t0;
-        const elapsed = TODAY - t0;
-        
-        // Se ainda não começou, 0. Se já passou do fim, 1. Senão, proporção.
-        fillWidthFactor = Math.max(0, Math.min(1, elapsed / totalDuration));
-      }
-
-      const timePct = Math.round(fillWidthFactor * 100);
-      // Cor dinâmica: atrasada sempre vermelho, demais calculados por média tempo+progresso
-      const barColor = isCritical ? 'var(--red)' : timeBarColor(status, timePct, pct);
-      const criticalClass = isCritical ? 'bar-overdue' : '';
-      const doneWidth = w * fillWidthFactor; // Largura final da parte preenchida
-      const displayPct = timePct;
-
-      barHTML = `
-        <div class="bar-ghost" style="left:${L}%; width:${w}%; background:${barColor}"></div>
-        <div class="bar-done ${criticalClass}" style="left:${L}%; width:${doneWidth}%; background:${barColor}"></div>
-        ${displayPct > 0 ? `<div class="bar-lbl" style="left:${L + doneWidth - 1}%">${displayPct}%</div>` : ''}
-      `;
-    } else if (issue.start && !issue.end) {
-      // Caso não tenha data de fim, mostramos apenas um marcador no início
-      const l = pctPos(issue.start);
-      if (l !== null) barHTML = `<div class="bar-ghost" style="left:${l}%; width:2%; min-width:4px; background:${color}"></div>`;
-    }
-
+    const barHTML  = buildBarHTML(issue.start, issue.end, status, pct, timeline, isOverdue);
     return `<tr data-iid="${issue.iid}">
       <td><span class="iid">#${issue.iid}</span></td>
-      <td>
-        ${issue.url ? `<a class="issue-link" href="${esc(issue.url)}" target="_blank">${esc(issue.title)}</a>` : `<span>${esc(issue.title)}</span>`}
-      </td>
+      <td>${issue.url
+        ? `<a class="issue-link" href="${esc(issue.url)}" target="_blank">${esc(issue.title)}</a>`
+        : `<span>${esc(issue.title)}</span>`}</td>
       <td class="date-cell">${fmtBR(issue.start)}</td>
-      <td class="date-cell ${isOverdue ? 'overdue' : ''}">${fmtBR(issue.end)}</td>
+      <td class="date-cell ${isOverdue?'overdue':''}">${fmtBR(issue.end)}</td>
       <td>
-        <select class="sbadge ${sClass}" onchange="changeStatus(${issue.iid}, this.value, this)">
-          ${['Andamento','Pausada','Concluída','Aguardando'].map(s => 
+        <select class="sbadge ${sClass}" onchange="changeStatus(${issue.iid},this.value,this)">
+          ${['Andamento','Pausada','Concluída','Aguardando'].map(s=>
             `<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
         </select>
       </td>
       <td class="progress-col">
         <div class="prog-track" onmousedown="startDrag(event,${issue.iid})" ontouchstart="startDragTouch(event,${issue.iid})">
-          <div class="prog-fill" style="width:${pct}%; background:${color}"></div>
+          <div class="prog-fill" style="width:${pct}%;background:${color}"></div>
           <div class="prog-label">${pct}%</div>
         </div>
       </td>
@@ -574,159 +561,349 @@ function renderRows(issues) {
   }).join('');
 }
 
-/* INTERACTION HANDLERS */
-window.changeStatus = function(iid, val, sel) {
-  // Garantimos que o objeto de progresso exista
-  if (!progress[iid]) progress[iid] = { pct: 0 };
-  
-  // Atualiza o status sem perguntas nem travas
-  progress[iid].status = val;
+/* ─── RENDER (MACRO) ─────────────────────────────────────────────────────── */
+function renderMacro() {
+  if (!document.getElementById('macroFrom').value) setDefaultMacroFilters();
+  buildTimeline('macroFrom','macroTo','macroTlHeader');
 
-  // Registra horário da última alteração (ISO 8601, fuso local)
-  progress[iid].updatedAt = new Date().toISOString();
+  const mss = applyMacroFilters();
+  const body = document.getElementById('macroBody');
+  const countEl = document.getElementById('macroCount');
+  if (countEl) countEl.textContent = `${mss.length} milestones`;
 
-  // Se mudar para concluída, o progresso vai para 100%
-  if (val === 'Concluída') {
-    progress[iid].pct = 100;
+  if (!mss.length) {
+    body.innerHTML = '<tr><td colspan="7" class="no-data">Nenhuma milestone cadastrada. Clique em ⊞ Milestones.</td></tr>';
+    return;
   }
+  const todayStr = fmt(TODAY);
+  body.innerHTML = mss.map(ms => {
+    const { autoProgress, manualProgress, status } = getMsProgress(ms);
+    const displayPct = manualProgress !== null ? manualProgress : autoProgress;
+    const color   = ms.color || 'var(--blue)';
+    const sClass  = STATUS_CLASS[ms.status]||'sb-w';
+    const isOverdue = ms.end && ms.end < todayStr && ms.status !== 'Concluída';
+    const barHTML = buildBarHTML(ms.start, ms.end, ms.status, displayPct, macroTimeline, isOverdue);
 
-  saveProgress();
-  saveToCentralData(); // <--- Sincroniza status com o banco coletivo
-  render(); 
-};
-
-function updateProgUI(iid) {
-  const manualPct = progress[iid]?.pct ?? 0;
-  const row = document.querySelector(`tr[data-iid="${iid}"]`);
-  if (!row) return;
-
-  // 1. Atualiza visualmente a barra de arraste (esforço real)
-  const track = row.querySelector('.prog-track');
-  if (track) {
-    const status = progress[iid]?.status || 'Andamento';
-    const color = STATUS_COLORS[status] || 'var(--blue)';
-    
-    const fill = track.querySelector('.prog-fill');
-    const label = track.querySelector('.prog-label');
-    
-    if (fill) {
-      fill.style.width = manualPct + '%';
-      fill.style.background = color;
-    }
-    if (label) label.textContent = manualPct + '%';
-  }
-
-  // 2. Lógica de renderização
-  // Removida a linha que chamava changeStatus(iid, 'Concluída') automaticamente.
-  // Agora, mesmo em 100%, o status só muda se VOCÊ quiser no select.
-  
-  render(); 
+    return `<tr data-ms-id="${ms.id}" class="ms-row" onclick="enterDrill('${ms.id}')">
+      <td style="width:32px">
+        <span class="ms-color-dot" style="background:${color}"></span>
+      </td>
+      <td>
+        <span class="ms-name">${esc(ms.name)}</span>
+        <span class="ms-issue-count">${ms.issueIids?.length||0} issues</span>
+      </td>
+      <td class="date-cell">${fmtBR(ms.start)}</td>
+      <td class="date-cell ${isOverdue?'overdue':''}">${fmtBR(ms.end)}</td>
+      <td>
+        <span class="sbadge ${sClass}">${ms.status}</span>
+      </td>
+      <td class="progress-col" onclick="event.stopPropagation()">
+        <div class="prog-track macro-prog-track" data-ms-id="${ms.id}"
+             onmousedown="startMsDrag(event,'${ms.id}')"
+             ontouchstart="startMsDragTouch(event,'${ms.id}')">
+          <div class="prog-fill" style="width:${displayPct}%;background:${color}"></div>
+          <div class="prog-label">${displayPct}%</div>
+        </div>
+        ${autoProgress !== displayPct
+          ? `<div class="auto-prog-hint">auto: ${autoProgress}%</div>` : ''}
+      </td>
+      <td class="bar-cell-td"><div class="bar-outer">${barHTML}</div></td>
+    </tr>`;
+  }).join('');
 }
 
+function getMsProgress(ms) {
+  // Progresso automático: média das issues vinculadas
+  let autoProgress = 0;
+  if (ms.issueIids?.length && allIssues.length) {
+    const linked = allIssues.filter(i => ms.issueIids.map(Number).includes(Number(i.iid)));
+    if (linked.length) {
+      autoProgress = Math.round(linked.reduce((s,i) => s + effectivePct(i), 0) / linked.length);
+    }
+  }
+  // Progresso manual (salvo no progress store com key "ms_<id>")
+  const manualProgress = progress[`ms_${ms.id}`]?.pct ?? null;
+  // Status derivado das issues se não definido manualmente
+  const status = ms.status || 'Não iniciada';
+  return { autoProgress, manualProgress, status };
+}
+
+/* ─── DRAG PROGRESS (ISSUES) ─────────────────────────────────────────────── */
+window.changeStatus = function(iid, val, sel) {
+  if (!progress[iid]) progress[iid] = { pct: 0 };
+  progress[iid].status = val;
+  progress[iid].updatedAt = new Date().toISOString();
+  if (val === 'Concluída') progress[iid].pct = 100;
+  saveProgress(); saveToCentralData(); render();
+};
 
 window.startDrag = function(e, iid) {
   e.preventDefault();
   const track = e.currentTarget;
-  
-  // Função interna para processar o movimento
-  const onMove = (ev) => {
+  const onMove = ev => {
     const rect = track.getBoundingClientRect();
-    const p = Math.round(Math.min(100, Math.max(0, (ev.clientX - rect.left) / rect.width * 100)));
-    
+    const p = Math.round(Math.min(100, Math.max(0, (ev.clientX-rect.left)/rect.width*100)));
     if (!progress[iid]) progress[iid] = {};
     progress[iid].pct = p;
-    
-    // Atualiza apenas o visual da barra de progresso durante o movimento para performance
     updateProgUI_Minimal(rowOf(iid), p, progress[iid].status);
   };
-
-const onUp = () => {
-  if (progress[iid]) progress[iid].updatedAt = new Date().toISOString();
-  saveProgress(); 
-  saveToCentralData(); // <--- Envia para o banco coletivo ao soltar o mouse
-  render();
-  document.removeEventListener('mousemove', onMove);
-  document.removeEventListener('mouseup', onUp);
-};
-
-  onMove(e); // Registra o clique inicial
+  const onUp = () => {
+    if (progress[iid]) progress[iid].updatedAt = new Date().toISOString();
+    saveProgress(); saveToCentralData(); render();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  onMove(e);
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
 };
-
 window.startDragTouch = function(e, iid) {
   const track = e.currentTarget;
-  
-  const onMove = (ev) => {
+  const onMove = ev => {
     const t = ev.touches[0];
     const rect = track.getBoundingClientRect();
-    const p = Math.round(Math.min(100, Math.max(0, (t.clientX - rect.left) / rect.width * 100)));
-    
+    const p = Math.round(Math.min(100, Math.max(0, (t.clientX-rect.left)/rect.width*100)));
     if (!progress[iid]) progress[iid] = {};
     progress[iid].pct = p;
-    
     updateProgUI_Minimal(rowOf(iid), p, progress[iid].status);
   };
-
   const onEnd = () => {
-    saveProgress();
-    render();
+    saveProgress(); render();
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend', onEnd);
   };
-
-  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchmove', onMove, {passive:false});
   document.addEventListener('touchend', onEnd);
 };
 
-// Função para BUSCAR os dados do arquivo JSON no GitHub
-async function loadCentralData() {
-  try {
-    const resp = await fetch(JSONBIN_API + "/latest", {
-      headers: { "X-Master-Key": JSONBIN_KEY }
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      progress = data.record;
-      render();
+/* ─── DRAG PROGRESS (MACROS) ─────────────────────────────────────────────── */
+window.startMsDrag = function(e, msId) {
+  e.preventDefault();
+  const track = e.currentTarget;
+  const onMove = ev => {
+    const rect = track.getBoundingClientRect();
+    const p = Math.round(Math.min(100, Math.max(0, (ev.clientX-rect.left)/rect.width*100)));
+    if (!progress[`ms_${msId}`]) progress[`ms_${msId}`] = {};
+    progress[`ms_${msId}`].pct = p;
+    const fill  = track.querySelector('.prog-fill');
+    const label = track.querySelector('.prog-label');
+    const ms    = internalMilestones.find(m => m.id === msId);
+    const color = ms?.color || 'var(--blue)';
+    if (fill)  { fill.style.width = p+'%'; fill.style.background = color; }
+    if (label) label.textContent = p+'%';
+  };
+  const onUp = () => {
+    saveProgress(); saveToCentralData(); renderMacro();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  onMove(e);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+};
+window.startMsDragTouch = function(e, msId) {
+  const track = e.currentTarget;
+  const onMove = ev => {
+    const t = ev.touches[0];
+    const rect = track.getBoundingClientRect();
+    const p = Math.round(Math.min(100, Math.max(0, (t.clientX-rect.left)/rect.width*100)));
+    if (!progress[`ms_${msId}`]) progress[`ms_${msId}`] = {};
+    progress[`ms_${msId}`].pct = p;
+    const fill  = track.querySelector('.prog-fill');
+    const label = track.querySelector('.prog-label');
+    if (fill)  fill.style.width = p+'%';
+    if (label) label.textContent = p+'%';
+  };
+  const onEnd = () => {
+    saveProgress(); saveToCentralData(); renderMacro();
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onEnd);
+  };
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend', onEnd);
+};
+
+/* ─── MODAL: MILESTONES ──────────────────────────────────────────────────── */
+window.openMsModal = function() {
+  editingMsId = null;
+  selectedIssueIids = new Set();
+  clearMsForm();
+  renderMsList();
+  populateIssuePicker();
+  document.getElementById('msModal').style.display = '';
+  document.getElementById('msModalBackdrop').style.display = '';
+  document.getElementById('msFormTitle').textContent = 'Nova Milestone';
+};
+window.closeMsModal = function() {
+  document.getElementById('msModal').style.display = 'none';
+  document.getElementById('msModalBackdrop').style.display = 'none';
+  editingMsId = null;
+};
+
+function clearMsForm() {
+  document.getElementById('msName').value   = '';
+  document.getElementById('msStart').value  = '';
+  document.getElementById('msEnd').value    = '';
+  document.getElementById('msColor').value  = '#2e6fcc';
+  document.getElementById('msStatus').value = 'Não iniciada';
+  selectedIssueIids = new Set();
+  updatePickerCount();
+}
+
+window.cancelMsForm = function() {
+  editingMsId = null;
+  clearMsForm();
+  renderMsList();
+};
+
+function renderMsList() {
+  const list  = document.getElementById('msList');
+  const empty = document.getElementById('msListEmpty');
+  if (!internalMilestones.length) {
+    empty.style.display = '';
+    list.querySelectorAll('.ms-list-item').forEach(el => el.remove());
+    return;
+  }
+  empty.style.display = 'none';
+  list.querySelectorAll('.ms-list-item').forEach(el => el.remove());
+  internalMilestones.forEach(ms => {
+    const div = document.createElement('div');
+    div.className = 'ms-list-item';
+    div.innerHTML = `
+      <span class="ms-list-dot" style="background:${ms.color||'#2e6fcc'}"></span>
+      <div class="ms-list-info">
+        <span class="ms-list-name">${esc(ms.name)}</span>
+        <span class="ms-list-meta">${fmtBR(ms.start)} → ${fmtBR(ms.end)} · ${ms.issueIids?.length||0} issues · <b>${ms.status}</b></span>
+      </div>
+      <div class="ms-list-actions">
+        <button class="btn" onclick="editMilestone('${ms.id}')">✎ Editar</button>
+        <button class="btn btn-danger" onclick="deleteMilestone('${ms.id}')">✕</button>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+window.editMilestone = function(id) {
+  const ms = internalMilestones.find(m => m.id === id);
+  if (!ms) return;
+  editingMsId = id;
+  document.getElementById('msName').value   = ms.name;
+  document.getElementById('msStart').value  = ms.start || '';
+  document.getElementById('msEnd').value    = ms.end   || '';
+  document.getElementById('msColor').value  = ms.color || '#2e6fcc';
+  document.getElementById('msStatus').value = ms.status || 'Não iniciada';
+  selectedIssueIids = new Set((ms.issueIids||[]).map(Number));
+  document.getElementById('msFormTitle').textContent = 'Editar Milestone';
+  populateIssuePicker();
+  updatePickerCount();
+};
+
+window.deleteMilestone = function(id) {
+  if (!confirm('Remover esta milestone?')) return;
+  internalMilestones = internalMilestones.filter(m => m.id !== id);
+  saveMilestonesLocal(); saveToCentralData();
+  renderMsList();
+  if (currentView === 'macro') renderMacro();
+};
+
+window.saveMilestone = function() {
+  const name   = document.getElementById('msName').value.trim();
+  const start  = document.getElementById('msStart').value;
+  const end    = document.getElementById('msEnd').value;
+  const color  = document.getElementById('msColor').value;
+  const status = document.getElementById('msStatus').value;
+
+  if (!name)  { alert('Informe o nome da milestone.'); return; }
+  if (!start) { alert('Informe a data de início.'); return; }
+  if (!end)   { alert('Informe a data de fim.'); return; }
+  if (end < start) { alert('A data de fim não pode ser anterior ao início.'); return; }
+
+  const issueIids = [...selectedIssueIids];
+
+  if (editingMsId) {
+    const idx = internalMilestones.findIndex(m => m.id === editingMsId);
+    if (idx !== -1) {
+      internalMilestones[idx] = { ...internalMilestones[idx], name, start, end, color, status, issueIids };
     }
-  } catch (e) {
-    console.error("Erro ao carregar banco central:", e);
+  } else {
+    const id = 'ms_' + Date.now();
+    internalMilestones.push({ id, name, start, end, color, status, issueIids });
+  }
+
+  saveMilestonesLocal(); saveToCentralData();
+  editingMsId = null;
+  clearMsForm();
+  renderMsList();
+  setDefaultMacroFilters();
+  if (currentView === 'macro') renderMacro();
+  document.getElementById('msFormTitle').textContent = 'Nova Milestone';
+};
+
+/* ─── ISSUE PICKER ─────────────────────────────────────────────────────── */
+function populateIssuePicker() {
+  const picker = document.getElementById('issuePicker');
+  picker.innerHTML = '';
+
+  if (!allIssues.length) {
+    picker.innerHTML = '<p class="picker-empty">Carregue as issues da API primeiro (botão ▶ Carregar).</p>';
+    return;
+  }
+
+  const search = (document.getElementById('issuePickerSearch')?.value || '').toLowerCase();
+  const shown  = allIssues.filter(i =>
+    !search || String(i.iid).includes(search) || i.title.toLowerCase().includes(search)
+  );
+
+  shown.forEach(issue => {
+    const checked = selectedIssueIids.has(Number(issue.iid));
+    const row = document.createElement('label');
+    row.className = 'picker-row' + (checked ? ' checked' : '');
+    row.innerHTML = `
+      <input type="checkbox" value="${issue.iid}" ${checked?'checked':''} onchange="toggleIssue(${issue.iid},this)">
+      <span class="picker-iid">#${issue.iid}</span>
+      <span class="picker-title">${esc(issue.title)}</span>
+      <span class="picker-dates">${fmtBR(issue.start)} → ${fmtBR(issue.end)}</span>
+    `;
+    picker.appendChild(row);
+  });
+
+  if (!shown.length) {
+    picker.innerHTML = '<p class="picker-empty">Nenhuma issue encontrada.</p>';
   }
 }
 
-async function saveToCentralData() {
-  try {
-    await fetch(JSONBIN_API, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": JSONBIN_KEY
-      },
-      body: JSON.stringify(progress)
-    });
-  } catch (e) {
-    console.error("Erro ao salvar banco central:", e);
-  }
+window.toggleIssue = function(iid, checkbox) {
+  if (checkbox.checked) selectedIssueIids.add(Number(iid));
+  else                  selectedIssueIids.delete(Number(iid));
+  const row = checkbox.closest('.picker-row');
+  if (row) row.classList.toggle('checked', checkbox.checked);
+  updatePickerCount();
+};
+
+function updatePickerCount() {
+  const el = document.getElementById('issuePickerCount');
+  if (el) el.textContent = `${selectedIssueIids.size} selecionadas`;
 }
 
-// Função para carregar as credenciais do arquivo externo
+window.filterIssuePicker = function() {
+  populateIssuePicker();
+};
+
+/* ─── CREDENTIALS ─────────────────────────────────────────────────────────── */
 async function loadCredentials() {
-  // Prioridade 1: configuração embutida no HTML (funciona em qualquer host)
   if (window.__API_CONFIG__) {
     const cfg = window.__API_CONFIG__;
     const finalCfg = {
       token:     cfg.token     || '',
       url:       cfg.url       || 'https://gitlab.4mti.com.br',
       group:     cfg.group     || '',
-      milestone: cfg.milestone || ''
+      milestone: cfg.milestone || '',
     };
     fillCfgUI(finalCfg);
     localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
     return finalCfg;
   }
-
-  // Prioridade 2: arquivo config.json (uso local / Live Server)
   try {
     const resp = await fetch(`config.json?t=${Date.now()}`);
     if (resp.ok) {
@@ -735,57 +912,47 @@ async function loadCredentials() {
         token:     cfg.token     || '',
         url:       cfg.url       || 'https://gitlab.4mti.com.br',
         group:     cfg.group     || '',
-        milestone: cfg.milestone || ''
+        milestone: cfg.milestone || '',
       };
       fillCfgUI(finalCfg);
       localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
       return finalCfg;
     }
-  } catch (e) {
-    console.error("Erro ao carregar config.json:", e);
-  }
+  } catch(e) { console.error("Erro ao carregar config.json:", e); }
   return null;
 }
 
-/* INIT */
+/* ─── INIT ──────────────────────────────────────────────────────────────── */
 async function inicializarApp() {
-  console.log("Iniciando App...");
-  
-  // 1. Carrega progresso local imediatamente (sem depender de rede)
   loadProgress();
+  loadMilestonesLocal();
 
-  // 2. Aguarda as credenciais PRIMEIRO — o token precisa estar pronto antes de qualquer chamada ao GitHub
   const cfgAtivo = await loadCredentials();
-
-  // 3. Agora que o GITHUB_TOKEN está preenchido, busca o banco central
   await loadCentralData();
 
-  // 3. Só tenta carregar a API se tivermos um token (seja do arquivo ou do que já estava salvo)
-  if (cfgAtivo && cfgAtivo.token) {
-    console.log("Token encontrado, carregando API...");
+  if (cfgAtivo?.token) {
     loadFromAPI();
   } else {
-    // Se falhou o arquivo, tenta ver se tem algo no localStorage de sessões anteriores
     const localCfg = loadCfg();
-    if (localCfg && localCfg.token) {
-        fillCfgUI(localCfg);
-        loadFromAPI();
-    }
+    if (localCfg?.token) { fillCfgUI(localCfg); loadFromAPI(); }
   }
 
-  // 4. Listeners de filtros
+  // Inicia na visão macro
+  switchView('macro');
+
+  // Listeners de filtros de issues
   ['filterSearch','filterStatus','filterFrom','filterTo'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', render);
   });
-
   const fState = document.getElementById('filterState');
-  if (fState) {
-    fState.addEventListener('change', () => {
-      if (allIssues.length) loadFromAPI();
-    });
-  }
+  if (fState) fState.addEventListener('change', () => { if (allIssues.length) loadFromAPI(); });
+
+  // Listeners de filtros macro
+  ['macroFrom','macroTo','macroSearch'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', renderMacro);
+  });
 }
 
-// Chama a inicialização
 inicializarApp();
