@@ -937,36 +937,33 @@ window.filterIssuePicker = function() {
 
 /* ─── CREDENTIALS ─────────────────────────────────────────────────────────── */
 async function loadCredentials() {
-  if (window.__API_CONFIG__) {
-    const cfg = window.__API_CONFIG__;
-    const finalCfg = {
-      token:          cfg.token          || '',
-      url:            cfg.url            || 'https://gitlab.4mti.com.br',
-      group:          cfg.group          || '',
-      milestone:      cfg.milestone      || '',
-      firebaseConfig: cfg.firebaseConfig || null
-    };
-    fillCfgUI(finalCfg);
-    localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
-    return finalCfg;
-  }
+  let apiCfg = window.__API_CONFIG__ || null;
+  let fileCfg = null;
   try {
     const resp = await fetch(`config.json?t=${Date.now()}`);
     if (resp.ok) {
-      const cfg = await resp.json();
-      const finalCfg = {
-        token:          cfg.token          || '',
-        url:            cfg.url            || 'https://gitlab.4mti.com.br',
-        group:          cfg.group          || '',
-        milestone:      cfg.milestone      || '',
-        firebaseConfig: cfg.firebaseConfig || null
-      };
-      fillCfgUI(finalCfg);
-      localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
-      return finalCfg;
+      fileCfg = await resp.json();
     }
   } catch(e) { console.error("Erro ao carregar config.json:", e); }
-  return null;
+
+  const cfg = apiCfg || fileCfg || {};
+  const fCfg = (fileCfg && fileCfg.firebaseConfig && fileCfg.firebaseConfig.apiKey && fileCfg.firebaseConfig.apiKey !== "SUA_API_KEY") 
+    ? fileCfg.firebaseConfig 
+    : (apiCfg && apiCfg.firebaseConfig && apiCfg.firebaseConfig.apiKey && apiCfg.firebaseConfig.apiKey !== "SUA_API_KEY")
+      ? apiCfg.firebaseConfig
+      : null;
+
+  const finalCfg = {
+    token:          cfg.token          || '',
+    url:            cfg.url            || 'https://gitlab.4mti.com.br',
+    group:          cfg.group          || '',
+    milestone:      cfg.milestone      || '',
+    firebaseConfig: fCfg
+  };
+
+  fillCfgUI(finalCfg);
+  localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
+  return finalCfg;
 }
 
 /* ─── INIT ──────────────────────────────────────────────────────────────── */

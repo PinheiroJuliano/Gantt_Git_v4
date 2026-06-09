@@ -4,11 +4,12 @@
   "group": "94",
   "milestone": "Cliente) Porto Seguro - EPC",
   "firebaseConfig": {
-    "apiKey": "SUA_API_KEY",
-    "authDomain": "SEU_AUTH_DOMAIN",
-    "projectId": "SEU_PROJECT_ID",
-    "storageBucket": "SEU_STORAGE_BUCKET",
-    "messagingSenderId": "SEU_MESSAGING_SENDER_ID",
-    "appId": "SUA_APP_ID"
+    "apiKey": "AIzaSyCV_x5ibDv04ta6DRMAtqTZChXhtovFZWo",
+    "authDomain": "ganttepc.firebaseapp.com",
+    "projectId": "ganttepc",
+    "storageBucket": "ganttepc.firebasestorage.app",
+    "messagingSenderId": "486680121170",
+    "appId": "1:486680121170:web:9aa50bc69f83eebb89348b",
+    "measurementId": "G-8LDCGMYFW7"
   }
 }
