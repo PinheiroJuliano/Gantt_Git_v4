@@ -465,7 +465,17 @@ input[type="text"], input[type="password"], input[type="date"], select {
 .picker-row:last-child { border-bottom: none; }
 .picker-row:hover { background: var(--bg3); }
 .picker-row.checked { background: var(--blue-bg); }
-.picker-row input[type="checkbox"] { flex-shrink: 0; cursor: pointer; }
+.picker-row input[type="checkbox"] {
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  accent-color: var(--blue);
+}
 .picker-iid {
   font-family: 'IBM Plex Mono', monospace; font-size: 10px;
   color: var(--text3); flex-shrink: 0; width: 42px;
