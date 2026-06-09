@@ -495,7 +495,14 @@ function buildTimeline(fromId, toId, headerId) {
   if (!hdr) return;
   hdr.innerHTML = '';
 
-  const dayStep = span > 60 ? 7 : 1;
+  let dayStep = 1;
+  if (span > 365)      dayStep = 90; // A cada 3 meses
+  else if (span > 180) dayStep = 30; // A cada mês
+  else if (span > 90)  dayStep = 14; // A cada 2 semanas
+  else if (span > 45)  dayStep = 7;  // A cada semana
+  else if (span > 20)  dayStep = 5;  // A cada 5 dias
+  else if (span > 10)  dayStep = 2;  // A cada 2 dias
+
   for (let i = 0; i <= span; i += dayStep) {
     const cur = new Date(t0); cur.setDate(t0.getDate()+i);
     const pct = (i/span)*100;
