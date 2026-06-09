@@ -28,6 +28,21 @@ let progress     = {};
 let internalMilestones = [];   // milestones cadastradas internamente
 let timeline     = null;
 let macroTimeline = null;
+let db           = null;       // Instância do Firebase Firestore
+
+function initFirebase(cfg) {
+  if (cfg && cfg.firebaseConfig && cfg.firebaseConfig.projectId && cfg.firebaseConfig.apiKey && cfg.firebaseConfig.apiKey !== "SUA_API_KEY") {
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(cfg.firebaseConfig);
+      }
+      db = firebase.firestore();
+      console.log("Firebase Firestore inicializado com sucesso.");
+    } catch (e) {
+      console.error("Erro ao inicializar Firebase:", e);
+    }
+  }
+}
 
 // Modo de visualização: 'macro' | 'issues' | 'drill'
 let currentView  = 'macro';
@@ -92,6 +107,22 @@ function loadMilestonesLocal() {
 
 /* ─── JSONBIN ─────────────────────────────────────────────────────────────── */
 async function loadCentralData() {
+  if (db) {
+    try {
+      const doc = await db.collection("gantt").doc("database").get();
+      if (doc.exists) {
+        const data = doc.data() || {};
+        progress = data.progress || {};
+        internalMilestones = data.milestones || internalMilestones;
+        saveMilestonesLocal();
+      }
+      render();
+    } catch(e) {
+      console.error("Erro ao carregar dados do Firebase Firestore:", e);
+    }
+    return;
+  }
+
   try {
     const resp = await fetch(JSONBIN_API + "/latest", {
       headers: { "X-Master-Key": JSONBIN_KEY }
@@ -114,6 +145,20 @@ async function loadCentralData() {
 }
 
 async function saveToCentralData() {
+  if (db) {
+    try {
+      await db.collection("gantt").doc("database").set({
+        progress,
+        milestones: internalMilestones,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      console.log("Dados salvos com sucesso no Firebase Firestore.");
+    } catch(e) {
+      console.error("Erro ao salvar dados no Firebase Firestore:", e);
+    }
+    return;
+  }
+
   try {
     await fetch(JSONBIN_API, {
       method: "PUT",
@@ -895,10 +940,11 @@ async function loadCredentials() {
   if (window.__API_CONFIG__) {
     const cfg = window.__API_CONFIG__;
     const finalCfg = {
-      token:     cfg.token     || '',
-      url:       cfg.url       || 'https://gitlab.4mti.com.br',
-      group:     cfg.group     || '',
-      milestone: cfg.milestone || '',
+      token:          cfg.token          || '',
+      url:            cfg.url            || 'https://gitlab.4mti.com.br',
+      group:          cfg.group          || '',
+      milestone:      cfg.milestone      || '',
+      firebaseConfig: cfg.firebaseConfig || null
     };
     fillCfgUI(finalCfg);
     localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
@@ -909,10 +955,11 @@ async function loadCredentials() {
     if (resp.ok) {
       const cfg = await resp.json();
       const finalCfg = {
-        token:     cfg.token     || '',
-        url:       cfg.url       || 'https://gitlab.4mti.com.br',
-        group:     cfg.group     || '',
-        milestone: cfg.milestone || '',
+        token:          cfg.token          || '',
+        url:            cfg.url            || 'https://gitlab.4mti.com.br',
+        group:          cfg.group          || '',
+        milestone:      cfg.milestone      || '',
+        firebaseConfig: cfg.firebaseConfig || null
       };
       fillCfgUI(finalCfg);
       localStorage.setItem(STORE_CFG, JSON.stringify(finalCfg));
@@ -928,6 +975,7 @@ async function inicializarApp() {
   loadMilestonesLocal();
 
   const cfgAtivo = await loadCredentials();
+  initFirebase(cfgAtivo);
   await loadCentralData();
 
   if (cfgAtivo?.token) {
