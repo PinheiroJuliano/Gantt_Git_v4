@@ -264,12 +264,15 @@ async function fetchAllPages(url, token) {
 function inferStatus(issue) {
   if (issue.state === 'closed') return 'Concluída';
   const labels = (issue.labels||[]).map(l => l.toLowerCase());
+  if (labels.includes('done')) return 'Concluída';
   if (labels.some(l => ['pausada','paused','bloqueada','blocked'].includes(l))) return 'Pausada';
   if (labels.some(l => ['aguardando','waiting','pendente'].includes(l))) return 'Aguardando';
   return 'Andamento';
 }
 function inferProgress(issue) {
   const desc = issue.description || '';
+  const labels = (issue.labels||[]).map(l => l.toLowerCase());
+  if (labels.includes('done')) return 100;
   const done  = (desc.match(/-\s*\[x\]/gi)||[]).length;
   const total = (desc.match(/-\s*\[[ x]\]/gi)||[]).length;
   if (total > 0) return Math.round(done/total*100);
