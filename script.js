@@ -114,6 +114,9 @@ async function loadCentralData() {
         const data = doc.data() || {};
         progress = data.progress || {};
         internalMilestones = data.milestones || internalMilestones;
+        if (data.issues) {
+          allIssues = data.issues;
+        }
         saveMilestonesLocal();
       }
       render();
@@ -147,11 +150,19 @@ async function loadCentralData() {
 async function saveToCentralData() {
   if (db) {
     try {
-      await db.collection("gantt").doc("database").set({
+      const dataToSave = {
         progress,
         milestones: internalMilestones,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      };
+      
+      // Se tivermos issues carregadas na memória, salvamos no cache do Firebase
+      if (allIssues && allIssues.length > 0) {
+        dataToSave.issues = allIssues;
+        dataToSave.issuesSyncedAt = new Date().toISOString();
+      }
+
+      await db.collection("gantt").doc("database").set(dataToSave, { merge: true });
       console.log("Dados salvos com sucesso no Firebase Firestore.");
     } catch(e) {
       console.error("Erro ao salvar dados no Firebase Firestore:", e);
@@ -323,7 +334,10 @@ async function loadFromAPI() {
         needsSync = true;
       }
     });
-    if (needsSync) { saveProgress(); saveToCentralData(); }
+    if (needsSync) { saveProgress(); }
+    
+    // Sempre atualiza o cache no Firebase quando a requisição ao GitLab for bem-sucedida
+    await saveToCentralData();
 
     // Atualiza picker do modal se estiver aberto
     if (document.getElementById('msModal').style.display !== 'none') populateIssuePicker();
@@ -332,7 +346,34 @@ async function loadFromAPI() {
     if (currentView === 'macro') renderMacro();
 
   } catch(e) {
-    console.error(e); setApiStatus(`❌ Erro: ${e.message}`, 'err');
+    console.error("Erro ao carregar do GitLab, tentando cache do Firebase...", e);
+    
+    if (db) {
+      try {
+        const doc = await db.collection("gantt").doc("database").get();
+        if (doc.exists) {
+          const data = doc.data() || {};
+          if (data.issues && data.issues.length > 0) {
+            allIssues = data.issues;
+            const syncDate = data.issuesSyncedAt ? fmtBR(data.issuesSyncedAt.slice(0, 10)) : 'desconhecida';
+            
+            setApiStatus(`☁ Cache: ${allIssues.length} issues (Sinc: ${syncDate})`, 'ok');
+            document.getElementById('btnReload').style.display = 'inline-block';
+            
+            setDefaultFilters();
+            if (document.getElementById('msModal').style.display !== 'none') populateIssuePicker();
+            
+            render();
+            if (currentView === 'macro') renderMacro();
+            return;
+          }
+        }
+      } catch (dbErr) {
+        console.error("Falha ao recuperar cache do Firebase:", dbErr);
+      }
+    }
+    
+    setApiStatus(`❌ Erro: ${e.message}`, 'err');
   }
 }
 
