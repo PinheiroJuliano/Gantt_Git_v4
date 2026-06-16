@@ -16,7 +16,7 @@ const STATUS_CLASS = {
 };
 const SUM_CLASS = {
   'Andamento': 's-a', 'Pausada': 's-p',
-  'Concluída': 's-c', 'Aguardando': 's-w',
+  'Concluída': 's-c', 'Aguardando': 's-w', 'Não iniciada': 's-w',
 };
 
 const JSONBIN_ID = "6a17424b21f9ee59d2927ff3";
@@ -561,6 +561,21 @@ function renderSummary(issues) {
   document.getElementById('summary').innerHTML = html;
 }
 
+function renderSummaryMacro(mss) {
+  const counts = {}; let totalPct = 0;
+  mss.forEach(m => {
+    const { autoProgress, manualProgress, status } = getMsProgress(m);
+    counts[status] = (counts[status] || 0) + 1;
+    totalPct += manualProgress !== null ? manualProgress : autoProgress;
+  });
+  const avg = mss.length ? Math.round(totalPct / mss.length) : 0;
+  const order = ['Andamento', 'Concluída', 'Não iniciada', 'Pausada'];
+  let html = order.map(s => counts[s]
+    ? `<div class="sum-card ${SUM_CLASS[s]}"><span class="val">${counts[s]}</span> ${s}</div>` : '').join('');
+  html += `<div class="sum-card s-avg"><span class="val">${avg}%</span> médio</div>`;
+  document.getElementById('summary').innerHTML = html;
+}
+
 function buildTimeline(fromId, toId, headerId) {
   const from = document.getElementById(fromId)?.value;
   const to = document.getElementById(toId)?.value;
@@ -706,6 +721,8 @@ function renderMacro() {
   const body = document.getElementById('macroBody');
   const countEl = document.getElementById('macroCount');
   if (countEl) countEl.textContent = `${mss.length} milestones`;
+
+  renderSummaryMacro(mss);
 
   if (!mss.length) {
     body.innerHTML = '<tr><td colspan="7" class="no-data">Nenhuma milestone cadastrada. Clique em ⊞ Milestones.</td></tr>';
