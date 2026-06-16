@@ -329,12 +329,24 @@ async function loadFromAPI() {
 
     let needsSync = false;
     allIssues.forEach(issue => {
-      if (!progress[issue.iid]) {
-        progress[issue.iid] = { pct: issue.apiProgress, status: issue.apiStatus, updatedAt: new Date().toISOString() };
-        needsSync = true;
-      } else if (!progress[issue.iid].status) {
-        progress[issue.iid].status = issue.apiStatus;
-        needsSync = true;
+      if (issue.apiStatus === 'Concluída') {
+        if (!progress[issue.iid] || progress[issue.iid].status !== 'Concluída' || progress[issue.iid].pct !== 100) {
+          progress[issue.iid] = {
+            ...progress[issue.iid],
+            pct: 100,
+            status: 'Concluída',
+            updatedAt: new Date().toISOString()
+          };
+          needsSync = true;
+        }
+      } else {
+        if (!progress[issue.iid]) {
+          progress[issue.iid] = { pct: issue.apiProgress, status: issue.apiStatus, updatedAt: new Date().toISOString() };
+          needsSync = true;
+        } else if (!progress[issue.iid].status) {
+          progress[issue.iid].status = issue.apiStatus;
+          needsSync = true;
+        }
       }
     });
     if (needsSync) { saveProgress(); }
@@ -441,7 +453,12 @@ window.changeMacroWeek = function (days) {
 };
 function applyMacroFilters() {
   const search = document.getElementById('macroSearch').value.toLowerCase();
-  return internalMilestones.filter(m => !search || m.name.toLowerCase().includes(search));
+  const filtered = internalMilestones.filter(m => !search || m.name.toLowerCase().includes(search));
+  return filtered.sort((a, b) => {
+    return (b.start || '').localeCompare(a.start || '') || 
+           (b.end || '').localeCompare(a.end || '') || 
+           (a.name || '').localeCompare(b.name || '');
+  });
 }
 
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
@@ -472,8 +489,19 @@ function fmtBR(s) {
 function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-function effectivePct(issue) { return progress[issue.iid]?.pct ?? issue.apiProgress; }
-function effectiveStatus(issue) { return progress[issue.iid]?.status ?? issue.apiStatus; }
+function effectivePct(issue) {
+  const pct = progress[issue.iid]?.pct ?? issue.apiProgress;
+  const status = progress[issue.iid]?.status ?? issue.apiStatus;
+  if (status === 'Concluída') return 100;
+  return pct;
+}
+function effectiveStatus(issue) {
+  const pct = effectivePct(issue);
+  if (pct === 100) return 'Concluída';
+  const status = progress[issue.iid]?.status ?? issue.apiStatus;
+  if (status === 'Concluída' && pct < 100) return 'Andamento';
+  return status;
+}
 function rowOf(iid) { return document.querySelector(`tr[data-iid="${iid}"]`); }
 function updateProgUI_Minimal(row, pct, status) {
   if (!row) return;
@@ -482,6 +510,13 @@ function updateProgUI_Minimal(row, pct, status) {
   const color = STATUS_COLORS[status || 'Andamento'] || 'var(--blue)';
   if (fill) { fill.style.width = pct + '%'; fill.style.background = color; }
   if (label) label.textContent = pct + '%';
+
+  // Atualiza também o select do status na linha
+  const select = row.querySelector('select.sbadge');
+  if (select) {
+    select.value = status;
+    select.className = 'sbadge ' + (STATUS_CLASS[status] || 'sb-w');
+  }
 }
 
 /* ─── RENDER (ISSUES) ────────────────────────────────────────────────────── */
@@ -729,7 +764,11 @@ window.changeStatus = function (iid, val, sel) {
   if (!progress[iid]) progress[iid] = { pct: 0 };
   progress[iid].status = val;
   progress[iid].updatedAt = new Date().toISOString();
-  if (val === 'Concluída') progress[iid].pct = 100;
+  if (val === 'Concluída') {
+    progress[iid].pct = 100;
+  } else if (progress[iid].pct === 100) {
+    progress[iid].pct = 90;
+  }
   saveProgress(); saveToCentralData(); render();
 };
 
@@ -741,7 +780,16 @@ window.startDrag = function (e, iid) {
     const p = Math.round(Math.min(100, Math.max(0, (ev.clientX - rect.left) / rect.width * 100)));
     if (!progress[iid]) progress[iid] = {};
     progress[iid].pct = p;
-    updateProgUI_Minimal(rowOf(iid), p, progress[iid].status);
+
+    let status = progress[iid].status || 'Andamento';
+    if (p === 100) {
+      status = 'Concluída';
+    } else if (p < 100 && status === 'Concluída') {
+      status = 'Andamento';
+    }
+    progress[iid].status = status;
+
+    updateProgUI_Minimal(rowOf(iid), p, status);
   };
   const onUp = () => {
     if (progress[iid]) progress[iid].updatedAt = new Date().toISOString();
@@ -761,10 +809,20 @@ window.startDragTouch = function (e, iid) {
     const p = Math.round(Math.min(100, Math.max(0, (t.clientX - rect.left) / rect.width * 100)));
     if (!progress[iid]) progress[iid] = {};
     progress[iid].pct = p;
-    updateProgUI_Minimal(rowOf(iid), p, progress[iid].status);
+
+    let status = progress[iid].status || 'Andamento';
+    if (p === 100) {
+      status = 'Concluída';
+    } else if (p < 100 && status === 'Concluída') {
+      status = 'Andamento';
+    }
+    progress[iid].status = status;
+
+    updateProgUI_Minimal(rowOf(iid), p, status);
   };
   const onEnd = () => {
-    saveProgress(); render();
+    if (progress[iid]) progress[iid].updatedAt = new Date().toISOString();
+    saveProgress(); saveToCentralData(); render();
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend', onEnd);
   };
@@ -862,7 +920,14 @@ function renderMsList() {
   }
   empty.style.display = 'none';
   list.querySelectorAll('.ms-list-item').forEach(el => el.remove());
-  internalMilestones.forEach(ms => {
+
+  const sorted = [...internalMilestones].sort((a, b) => {
+    return (b.start || '').localeCompare(a.start || '') || 
+           (b.end || '').localeCompare(a.end || '') || 
+           (a.name || '').localeCompare(b.name || '');
+  });
+
+  sorted.forEach(ms => {
     const div = document.createElement('div');
     div.className = 'ms-list-item';
     div.innerHTML = `
