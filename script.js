@@ -319,7 +319,7 @@ async function loadFromAPI() {
     );
     allIssues = raw.map(mapIssue)
       .filter(i => !i.labels.some(l => ignoredLabels.includes(l)));
-    allIssues.sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999'));
+    allIssues.sort((a, b) => (a.end || '9999-12-31').localeCompare(b.end || '9999-12-31') || (a.start || '9999-12-31').localeCompare(b.start || '9999-12-31'));
 
     document.getElementById('msBadge').textContent = cfg.milestone || 'Todas';
     document.getElementById('btnReload').style.display = 'inline-block';
@@ -418,13 +418,18 @@ function applyFilters() {
   const to = document.getElementById('filterTo').value;
   const status = document.getElementById('filterStatus').value;
   const search = document.getElementById('filterSearch').value.toLowerCase();
-  return issues.filter(i => {
+  const filtered = issues.filter(i => {
     const iStatus = effectiveStatus(i);
     if (status && iStatus !== status) return false;
     if (search && !String(i.iid).includes(search) && !i.title.toLowerCase().includes(search)) return false;
     if (from && i.end && i.end < from) return false;
     if (to && i.start && i.start > to) return false;
     return true;
+  });
+  return filtered.sort((a, b) => {
+    return (a.end || '9999-12-31').localeCompare(b.end || '9999-12-31') || 
+           (a.start || '9999-12-31').localeCompare(b.start || '9999-12-31') || 
+           (a.iid - b.iid);
   });
 }
 
