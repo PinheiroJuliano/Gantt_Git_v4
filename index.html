@@ -24,22 +24,14 @@
     <div class="header-right">
         <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
         <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
+        <button class="btn btn-icon" id="btnConfig" onclick="openCfgModal()" title="Configurações">⚙</button>
         <!-- Botão só visível na tela macro -->
         <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
     </div>
 </header>
 
-<!-- CONFIG BAR -->
-<div class="api-config-bar" id="configBar">
-    <label>Token</label>
-    <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
-    <label>URL</label>
-    <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
-    <label>Grupo</label>
-    <input type="text" id="cfgGroup" placeholder="94" data-small />
-    <label>Milestone</label>
-    <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
-</div>
+<!-- CONFIG BAR (inputs movidos para modal de configuração) -->
+<div class="api-config-bar" id="configBar" style="display:none"></div>
 
 <!-- TOOLBAR (issues) -->
 <div class="config-bar" id="issueToolbar">
@@ -133,7 +125,7 @@
 </div>
 
 <!-- =============================================
-     MODAL: Gestão de Milestones Internas
+     MODAL: Lista de Milestones Internas
      ============================================= -->
 <div class="modal-backdrop" id="msModalBackdrop" onclick="closeMsModal()" style="display:none"></div>
 <div class="modal" id="msModal" style="display:none">
@@ -147,10 +139,23 @@
         <p class="modal-empty" id="msListEmpty">Nenhuma milestone cadastrada ainda.</p>
     </div>
 
-    <!-- Formulário: novo / editar -->
-    <div class="modal-section modal-form-section" id="msForm">
-        <div class="modal-form-title" id="msFormTitle">Nova Milestone</div>
+    <!-- Rodapé: Nova Milestone -->
+    <div class="modal-footer">
+        <button class="btn btn-new-ms" onclick="openMsFormModal(null)">＋ Nova Milestone</button>
+    </div>
+</div>
 
+<!-- =============================================
+     MODAL: Formulário de Milestone (Nova / Editar)
+     ============================================= -->
+<div class="modal-backdrop modal-backdrop-inner" id="msFormModalBackdrop" onclick="closeMsFormModal()" style="display:none"></div>
+<div class="modal modal-form-floating" id="msFormModal" style="display:none">
+    <div class="modal-header">
+        <h2 class="modal-title" id="msFormTitle">Nova Milestone</h2>
+        <button class="modal-close" onclick="closeMsFormModal()">✕</button>
+    </div>
+
+    <div class="modal-form-section">
         <div class="form-row">
             <div class="form-group" style="flex:2">
                 <label class="form-label">Nome *</label>
@@ -194,8 +199,59 @@
         </div>
 
         <div class="form-actions">
-            <button class="btn" onclick="cancelMsForm()">Cancelar</button>
+            <button class="btn" onclick="closeMsFormModal()">Cancelar</button>
             <button class="btn primary" onclick="saveMilestone()">Salvar milestone</button>
+        </div>
+    </div>
+</div>
+
+<!-- =============================================
+     MODAL: Configurações
+     ============================================= -->
+<div class="modal-backdrop" id="cfgModalBackdrop" onclick="closeCfgModal()" style="display:none"></div>
+<div class="modal modal-cfg" id="cfgModal" style="display:none">
+    <div class="modal-header">
+        <h2 class="modal-title">⚙ Configurações</h2>
+        <button class="modal-close" onclick="closeCfgModal()">✕</button>
+    </div>
+
+    <div class="modal-form-section">
+        <p class="modal-cfg-hint">As configurações são salvas localmente no navegador.</p>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Token GitLab</label>
+                <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">URL do GitLab</label>
+                <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex:0 0 150px">
+                <label class="form-label">ID do Grupo</label>
+                <input type="text" id="cfgGroup" placeholder="94" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Milestone do GitLab</label>
+                <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
+            </div>
+        </div>
+
+        <div class="modal-cfg-separator"></div>
+
+        <div class="modal-cfg-danger-zone">
+            <div class="modal-cfg-danger-title">⚠ Zona de Perigo</div>
+            <p class="modal-cfg-danger-desc">Criar um novo projeto apaga permanentemente todas as milestones internas e o progresso salvo, gerando um ambiente limpo com as novas configurações.</p>
+            <button class="btn btn-danger btn-new-project" onclick="newProject()">🗑 Salvar &amp; Novo Projeto</button>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn" onclick="closeCfgModal()">Cancelar</button>
+            <button class="btn primary" onclick="saveCfgOnly()">✓ Salvar configurações</button>
         </div>
     </div>
 </div>

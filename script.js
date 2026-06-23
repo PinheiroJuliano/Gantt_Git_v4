@@ -355,7 +355,7 @@ async function loadFromAPI() {
     await saveToCentralData();
 
     // Atualiza picker do modal se estiver aberto
-    if (document.getElementById('msModal').style.display !== 'none') populateIssuePicker();
+    if (document.getElementById('msFormModal').style.display !== 'none') populateIssuePicker();
 
     render();
     if (currentView === 'macro') renderMacro();
@@ -376,7 +376,7 @@ async function loadFromAPI() {
             document.getElementById('btnReload').style.display = 'inline-block';
 
             setDefaultFilters();
-            if (document.getElementById('msModal').style.display !== 'none') populateIssuePicker();
+            if (document.getElementById('msFormModal').style.display !== 'none') populateIssuePicker();
 
             render();
             if (currentView === 'macro') renderMacro();
@@ -902,17 +902,45 @@ window.startMsDragTouch = function (e, msId) {
 /* ─── MODAL: MILESTONES ──────────────────────────────────────────────────── */
 window.openMsModal = function () {
   editingMsId = null;
-  selectedIssueIids = new Set();
-  clearMsForm();
   renderMsList();
-  populateIssuePicker();
   document.getElementById('msModal').style.display = '';
   document.getElementById('msModalBackdrop').style.display = '';
-  document.getElementById('msFormTitle').textContent = 'Nova Milestone';
+};
+
+window.openMsFormModal = function (id) {
+  if (id) {
+    // Modo edição
+    const ms = internalMilestones.find(m => m.id === id);
+    if (!ms) return;
+    editingMsId = id;
+    document.getElementById('msName').value = ms.name;
+    document.getElementById('msStart').value = ms.start || '';
+    document.getElementById('msEnd').value = ms.end || '';
+    document.getElementById('msColor').value = ms.color || '#2e6fcc';
+    document.getElementById('msStatus').value = ms.status || 'Não iniciada';
+    selectedIssueIids = new Set((ms.issueIids || []).map(Number));
+    document.getElementById('msFormTitle').textContent = 'Editar Milestone';
+  } else {
+    // Modo criação
+    editingMsId = null;
+    clearMsForm();
+    document.getElementById('msFormTitle').textContent = 'Nova Milestone';
+  }
+  populateIssuePicker();
+  updatePickerCount();
+  document.getElementById('msFormModal').style.display = '';
+  document.getElementById('msFormModalBackdrop').style.display = '';
 };
 window.closeMsModal = function () {
   document.getElementById('msModal').style.display = 'none';
   document.getElementById('msModalBackdrop').style.display = 'none';
+  closeMsFormModal();
+  editingMsId = null;
+};
+
+window.closeMsFormModal = function () {
+  document.getElementById('msFormModal').style.display = 'none';
+  document.getElementById('msFormModalBackdrop').style.display = 'none';
   editingMsId = null;
 };
 
@@ -924,12 +952,11 @@ function clearMsForm() {
   document.getElementById('msStatus').value = 'Não iniciada';
   selectedIssueIids = new Set();
   updatePickerCount();
+  populateIssuePicker(); // Garante que o picker seja reiniciado sem seleções
 }
 
 window.cancelMsForm = function () {
-  editingMsId = null;
-  clearMsForm();
-  renderMsList();
+  closeMsFormModal();
 };
 
 function renderMsList() {
@@ -968,18 +995,7 @@ function renderMsList() {
 }
 
 window.editMilestone = function (id) {
-  const ms = internalMilestones.find(m => m.id === id);
-  if (!ms) return;
-  editingMsId = id;
-  document.getElementById('msName').value = ms.name;
-  document.getElementById('msStart').value = ms.start || '';
-  document.getElementById('msEnd').value = ms.end || '';
-  document.getElementById('msColor').value = ms.color || '#2e6fcc';
-  document.getElementById('msStatus').value = ms.status || 'Não iniciada';
-  selectedIssueIids = new Set((ms.issueIids || []).map(Number));
-  document.getElementById('msFormTitle').textContent = 'Editar Milestone';
-  populateIssuePicker();
-  updatePickerCount();
+  openMsFormModal(id);
 };
 
 window.deleteMilestone = function (id) {
@@ -1015,12 +1031,15 @@ window.saveMilestone = function () {
   }
 
   saveMilestonesLocal(); saveToCentralData();
-  editingMsId = null;
+
+  // Fechar form e limpar seleções para evitar confusões
+  closeMsFormModal();
   clearMsForm();
+
+  // Atualiza a lista no modal principal
   renderMsList();
   setDefaultMacroFilters();
   if (currentView === 'macro') renderMacro();
-  document.getElementById('msFormTitle').textContent = 'Nova Milestone';
 };
 
 /* ─── ISSUE PICKER ─────────────────────────────────────────────────────── */
@@ -1071,6 +1090,50 @@ function updatePickerCount() {
 
 window.filterIssuePicker = function () {
   populateIssuePicker();
+};
+
+/* ─── CONFIG MODAL ────────────────────────────────────────────────────── */
+window.openCfgModal = function () {
+  // Preenche os inputs com a config atual antes de abrir
+  fillCfgUI(loadCfg());
+  document.getElementById('cfgModal').style.display = '';
+  document.getElementById('cfgModalBackdrop').style.display = '';
+};
+
+window.closeCfgModal = function () {
+  document.getElementById('cfgModal').style.display = 'none';
+  document.getElementById('cfgModalBackdrop').style.display = 'none';
+};
+
+window.saveCfgOnly = function () {
+  const cfg = readCfgFromUI();
+  if (!cfg.token) { alert('Informe o Token do GitLab.'); return; }
+  localStorage.setItem(STORE_CFG, JSON.stringify(cfg));
+  closeCfgModal();
+  // Recarrega com nova config
+  loadFromAPI();
+};
+
+window.newProject = function () {
+  const cfg = readCfgFromUI();
+  if (!cfg.token) { alert('Informe o Token do GitLab antes de criar um novo projeto.'); return; }
+  if (!confirm('\u26a0 ATENÇÃO\n\nIsso vai apagar permanentemente todas as milestones internas e o progresso salvo, criando um ambiente limpo.\n\nEssa ação não pode ser desfeita. Continuar?')) return;
+
+  // Salva nova config
+  localStorage.setItem(STORE_CFG, JSON.stringify(cfg));
+
+  // Limpa todo o estado local
+  internalMilestones = [];
+  progress = {};
+  allIssues = [];
+  localStorage.removeItem('gantt_milestones_v1');
+  localStorage.removeItem(STORE_PROG);
+
+  // Salva estado vazio no banco central
+  saveToCentralData().then(() => {
+    closeCfgModal();
+    location.reload();
+  });
 };
 
 /* ─── CREDENTIALS ─────────────────────────────────────────────────────────── */

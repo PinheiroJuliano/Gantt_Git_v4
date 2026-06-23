@@ -305,6 +305,15 @@ input[type="text"], input[type="password"], input[type="date"], select {
 .btn.primary:hover { opacity: 0.88; }
 
 .no-data { padding: 48px; text-align: center; color: var(--text3); font-size: 13px; }
+
+/* BTN ICON (engrenagem etc.) */
+.btn-icon {
+  font-size: 14px;
+  padding: 5px 9px;
+  line-height: 1;
+  color: var(--text2);
+}
+.btn-icon:hover { background: var(--bg3); color: var(--text); }
 .spinner {
   display: inline-block; width: 11px; height: 11px;
   border: 2px solid var(--border2); border-top-color: var(--blue);
@@ -379,6 +388,10 @@ input[type="text"], input[type="password"], input[type="date"], select {
   background: rgba(0,0,0,0.35);
   z-index: 300;
 }
+/* Backdrop interno: cobre o modal de lista, mas não fecha ele */
+.modal-backdrop-inner {
+  z-index: 420;
+}
 .modal {
   position: fixed; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
@@ -388,6 +401,54 @@ input[type="text"], input[type="password"], input[type="date"], select {
   border-radius: 12px;
   box-shadow: 0 12px 48px rgba(0,0,0,0.22);
   display: flex; flex-direction: column;
+}
+/* Modal do formulário de milestone flutua acima do modal da lista */
+.modal-form-floating {
+  z-index: 500;
+  width: min(760px, 95vw);
+}
+/* Modal de configurações — mais estreito */
+.modal-cfg {
+  width: min(520px, 95vw);
+}
+.modal-cfg-hint {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+}
+.modal-cfg-separator {
+  height: 1px;
+  background: var(--border2);
+  margin: 20px 0;
+}
+.modal-cfg-danger-zone {
+  background: var(--red-bg);
+  border: 1px solid rgba(204, 51, 51, 0.25);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.modal-cfg-danger-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+.modal-cfg-danger-desc {
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.btn-new-project {
+  font-size: 11px;
+  font-weight: 600;
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -402,6 +463,28 @@ input[type="text"], input[type="password"], input[type="date"], select {
 }
 .modal-close:hover { background: var(--bg3); color: var(--text); }
 .modal-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+
+/* Rodapé do modal de lista (botão Nova Milestone) */
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+.btn-new-ms {
+  width: 100%;
+  border-style: dashed;
+  border-color: var(--border2);
+  color: var(--blue);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 16px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-new-ms:hover {
+  background: var(--blue-bg);
+  border-color: var(--blue);
+}
 .modal-form-section { padding: 16px 20px; }
 .modal-form-title { font-size: 12px; font-weight: 700; color: var(--text2);
   text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px; }
