@@ -14,6 +14,8 @@
     <div class="header-left">
         <h1>▦ Gantt EPC</h1>
         <span class="ms-pill" id="msBadge">—</span>
+        <!-- SELETOR DE PROJETOS -->
+        <div class="proj-selector" id="projectSelectorWrap"></div>
         <!-- BREADCRUMB: aparece no drill-down -->
         <nav class="breadcrumb" id="breadcrumb" style="display:none">
             <button class="breadcrumb-back" onclick="exitDrill()">← Voltar</button>
@@ -25,12 +27,10 @@
         <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
         <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
         <button class="btn btn-icon" id="btnConfig" onclick="openCfgModal()" title="Configurações">⚙</button>
-        <!-- Botão só visível na tela macro -->
         <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
     </div>
 </header>
 
-<!-- CONFIG BAR (inputs movidos para modal de configuração) -->
 <div class="api-config-bar" id="configBar" style="display:none"></div>
 
 <!-- TOOLBAR (issues) -->
@@ -59,7 +59,7 @@
     <span id="api-status" class="warn">⚠ Configure</span>
 </div>
 
-<!-- TOOLBAR (macro milestones) — oculto por padrão -->
+<!-- TOOLBAR (macro milestones) -->
 <div class="config-bar" id="macroToolbar" style="display:none">
     <label class="toolbar-label">Linha do Tempo</label>
     <input type="date" id="macroFrom" title="Data inicial" />
@@ -74,7 +74,7 @@
 <!-- SUMMARY -->
 <div class="summary" id="summary"></div>
 
-<!-- MACRO VIEW: tabela de milestones internas -->
+<!-- MACRO VIEW -->
 <div class="wrap" id="macroWrap" style="display:none">
     <table>
         <thead>
@@ -99,7 +99,7 @@
     </table>
 </div>
 
-<!-- ISSUES VIEW: tabela de issues (modo drill-down ou modo normal) -->
+<!-- ISSUES VIEW -->
 <div class="wrap" id="issuesWrap">
     <table>
         <thead>
@@ -133,13 +133,9 @@
         <h2 class="modal-title">⊞ Milestones Internas</h2>
         <button class="modal-close" onclick="closeMsModal()">✕</button>
     </div>
-
-    <!-- Lista de milestones cadastradas -->
     <div class="modal-section" id="msList">
         <p class="modal-empty" id="msListEmpty">Nenhuma milestone cadastrada ainda.</p>
     </div>
-
-    <!-- Rodapé: Nova Milestone -->
     <div class="modal-footer">
         <button class="btn btn-new-ms" onclick="openMsFormModal(null)">＋ Nova Milestone</button>
     </div>
@@ -154,19 +150,17 @@
         <h2 class="modal-title" id="msFormTitle">Nova Milestone</h2>
         <button class="modal-close" onclick="closeMsFormModal()">✕</button>
     </div>
-
     <div class="modal-form-section">
         <div class="form-row">
             <div class="form-group" style="flex:2">
                 <label class="form-label">Nome *</label>
-                <input type="text" id="msName" placeholder="Ex: Implementar leitura do catálogo Porsche" />
+                <input type="text" id="msName" placeholder="Ex: Implementar leitura do catálogo" />
             </div>
             <div class="form-group">
                 <label class="form-label">Cor</label>
                 <input type="color" id="msColor" value="#2e6fcc" style="width:100%;height:34px;padding:2px 4px;cursor:pointer" />
             </div>
         </div>
-
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Início *</label>
@@ -185,8 +179,6 @@
                 </select>
             </div>
         </div>
-
-        <!-- Multi-select de issues -->
         <div class="form-group">
             <label class="form-label">Issues vinculadas</label>
             <div class="issue-picker-bar">
@@ -197,7 +189,6 @@
                 <p class="picker-empty">Carregue as issues da API primeiro (botão ▶ Carregar).</p>
             </div>
         </div>
-
         <div class="form-actions">
             <button class="btn" onclick="closeMsFormModal()">Cancelar</button>
             <button class="btn primary" onclick="saveMilestone()">Salvar milestone</button>
@@ -206,7 +197,7 @@
 </div>
 
 <!-- =============================================
-     MODAL: Configurações
+     MODAL: Configurações + Projetos
      ============================================= -->
 <div class="modal-backdrop" id="cfgModalBackdrop" onclick="closeCfgModal()" style="display:none"></div>
 <div class="modal modal-cfg" id="cfgModal" style="display:none">
@@ -216,49 +207,60 @@
     </div>
 
     <div class="modal-form-section">
-        <p class="modal-cfg-hint">As configurações são salvas localmente no navegador.</p>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">Token GitLab</label>
-                <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">URL do GitLab</label>
-                <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group" style="flex:0 0 150px">
-                <label class="form-label">ID do Grupo</label>
-                <input type="text" id="cfgGroup" placeholder="94" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Milestone do GitLab</label>
-                <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
-            </div>
+        <!-- LISTA DE PROJETOS -->
+        <div class="modal-cfg-section-title">📁 Projetos</div>
+        <div id="cfgProjectList"></div>
+        <div style="margin-top:8px">
+            <button class="btn btn-new-ms" onclick="openNewProjectForm()">＋ Novo Projeto</button>
         </div>
 
         <div class="modal-cfg-separator"></div>
 
-        <div class="modal-cfg-danger-zone">
-            <div class="modal-cfg-danger-title">⚠ Zona de Perigo</div>
-            <p class="modal-cfg-danger-desc">Criar um novo projeto apaga permanentemente todas as milestones internas e o progresso salvo, gerando um ambiente limpo com as novas configurações.</p>
-            <button class="btn btn-danger btn-new-project" onclick="newProject()">🗑 Salvar &amp; Novo Projeto</button>
+        <!-- FORMULÁRIO DE PROJETO (novo/editar) -->
+        <div id="cfgProjForm" style="display:none">
+            <input type="hidden" id="cfgProjEditId" value="" />
+            <div class="modal-cfg-section-title" id="cfgProjFormTitle">Novo Projeto</div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2">
+                    <label class="form-label">Nome do Projeto *</label>
+                    <input type="text" id="cfgProjName" placeholder="Ex: EPC, Precatórios…" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Token GitLab</label>
+                    <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">URL do GitLab</label>
+                    <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="flex:0 0 150px">
+                    <label class="form-label">ID do Grupo</label>
+                    <input type="text" id="cfgGroup" placeholder="94" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Milestone do GitLab</label>
+                    <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn" onclick="cancelProjForm()">Cancelar</button>
+                <button class="btn primary" onclick="saveNewProject()">✓ Salvar Projeto</button>
+            </div>
+            <div class="modal-cfg-separator"></div>
         </div>
 
-        <div class="form-actions">
-            <button class="btn" onclick="closeCfgModal()">Cancelar</button>
-            <button class="btn primary" onclick="saveCfgOnly()">✓ Salvar configurações</button>
-        </div>
+        <p class="modal-cfg-hint">As configurações são salvas localmente no navegador.</p>
     </div>
 </div>
 
-<!-- =============================================
-     VIEW SWITCHER (FAB)
-     ============================================= -->
+<!-- VIEW SWITCHER (FAB) -->
 <div class="view-fab" id="viewFab">
     <button class="fab-btn active" id="fabMacro" onclick="switchView('macro')" title="Visão macro (milestones)">⊟ Macro</button>
     <button class="fab-btn" id="fabIssues" onclick="switchView('issues')" title="Visão de issues">≡ Issues</button>
@@ -271,12 +273,12 @@
     group:        "94",
     milestone:    "Cliente) Porto Seguro - EPC",
     firebaseConfig: {
-      apiKey: "SUA_API_KEY",
-      authDomain: "SEU_AUTH_DOMAIN",
-      projectId: "SEU_PROJECT_ID",
-      storageBucket: "SEU_STORAGE_BUCKET",
-      messagingSenderId: "SEU_MESSAGING_SENDER_ID",
-      appId: "SUA_APP_ID"
+      apiKey: "AIzaSyCV_x5ibDv04ta6DRMAtqTZChXhtovFZWo",
+      authDomain: "ganttepc.firebaseapp.com",
+      projectId: "ganttepc",
+      storageBucket: "ganttepc.firebasestorage.app",
+      messagingSenderId: "486680121170",
+      appId: "1:486680121170:web:9aa50bc69f83eebb89348b"
     }
   };
 </script>
