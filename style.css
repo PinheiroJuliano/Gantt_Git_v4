@@ -684,3 +684,16 @@ input[type="text"], input[type="password"], input[type="date"], select {
   border: 1px solid var(--blue);
   border-radius: 10px;
 }
+
+/* ─── Feedback: progresso da milestone travado (controlado por issues) ─── */
+.prog-locked-flash {
+  animation: prog-locked-pulse 0.4s ease;
+}
+@keyframes prog-locked-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+  30%  { box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+.macro-prog-track[data-ms-id] {
+  position: relative;
+}

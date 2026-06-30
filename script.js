@@ -605,9 +605,9 @@ function renderSummary(issues) {
 function renderSummaryMacro(mss) {
   const counts = {}; let totalPct = 0;
   mss.forEach(m => {
-    const {autoProgress, manualProgress, status} = getMsProgress(m);
+    const {autoProgress, manualOverride, status} = getMsProgress(m);
     counts[status] = (counts[status]||0)+1;
-    totalPct += manualProgress !== null ? manualProgress : autoProgress;
+    totalPct += manualOverride !== null ? manualOverride : autoProgress;
   });
   const avg = mss.length ? Math.round(totalPct/mss.length) : 0;
   const order = ['Andamento','Concluída','Não iniciada','Pausada'];
@@ -753,12 +753,12 @@ function renderMacro() {
   }
   const todayStr = fmt(TODAY);
   body.innerHTML = mss.map(ms => {
-    const {autoProgress, manualProgress, status} = getMsProgress(ms);
-    const displayPct = manualProgress !== null ? manualProgress : autoProgress;
+    const {autoProgress, manualOverride, status} = getMsProgress(ms);
+    const displayPct = manualOverride !== null ? manualOverride : autoProgress;
     const color   = ms.color||'var(--blue)';
-    const sClass  = STATUS_CLASS[ms.status]||'sb-w';
-    const isOverdue = ms.end && ms.end < todayStr && ms.status !== 'Concluída';
-    const barHTML = buildBarHTML(ms.start, ms.end, ms.status, displayPct, macroTimeline, isOverdue);
+    const sClass  = STATUS_CLASS[status]||'sb-w';
+    const isOverdue = ms.end && ms.end < todayStr && status !== 'Concluída';
+    const barHTML = buildBarHTML(ms.start, ms.end, status, displayPct, macroTimeline, isOverdue);
     return `<tr data-ms-id="${ms.id}" class="ms-row" onclick="enterDrill('${ms.id}')">
       <td style="width:32px"><span class="ms-color-dot" style="background:${color}"></span></td>
       <td>
@@ -767,7 +767,12 @@ function renderMacro() {
       </td>
       <td class="date-cell">${fmtBR(ms.start)}</td>
       <td class="date-cell ${isOverdue?'overdue':''}">${fmtBR(ms.end)}</td>
-      <td><span class="sbadge ${sClass}">${ms.status}</span></td>
+      <td onclick="event.stopPropagation()">
+        <select class="sbadge ${sClass}" onchange="changeMsStatus('${ms.id}',this.value,this)">
+          ${['Não iniciada','Andamento','Pausada','Concluída'].map(s =>
+            `<option value="${s}" ${s===status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
       <td class="progress-col" onclick="event.stopPropagation()">
         <div class="prog-track macro-prog-track" data-ms-id="${ms.id}"
              onmousedown="startMsDrag(event,'${ms.id}')"
@@ -775,23 +780,36 @@ function renderMacro() {
           <div class="prog-fill" style="width:${displayPct}%;background:${color}"></div>
           <div class="prog-label">${displayPct}%</div>
         </div>
-        ${autoProgress !== displayPct ? `<div class="auto-prog-hint">auto: ${autoProgress}%</div>` : ''}
+        ${manualOverride !== null && manualOverride !== autoProgress ? `<div class="auto-prog-hint">auto: ${autoProgress}%</div>` : ''}
       </td>
       <td class="bar-cell-td"><div class="bar-outer">${barHTML}</div></td>
     </tr>`;
   }).join('');
 }
 
+/*
+  Progresso da milestone:
+  - autoProgress: média calculada a partir do progresso das issues vinculadas
+    (sempre recalculada, reflete o estado atual das issues).
+  - manualOverride: só existe se alguém arrastou manualmente a barra desta
+    milestone E essa milestone NÃO TEM issues vinculadas (nesse caso não há
+    progresso automático possível, então o valor manual é necessário).
+    Se a milestone tem issues vinculadas, o progresso automático sempre
+    prevalece e qualquer override manual antigo é ignorado.
+  - status: vem do cadastro da milestone (editável agora também na grade).
+*/
 function getMsProgress(ms) {
   let autoProgress = 0;
-  if (ms.issueIids?.length && allIssues.length) {
+  const hasLinkedIssues = !!(ms.issueIids?.length && allIssues.length);
+  if (hasLinkedIssues) {
     const linked = allIssues.filter(i => ms.issueIids.map(Number).includes(Number(i.iid)));
     if (linked.length)
       autoProgress = Math.round(linked.reduce((s,i) => s+effectivePct(i), 0) / linked.length);
   }
-  const manualProgress = progress[`ms_${ms.id}`]?.pct ?? null;
-  const status         = ms.status || 'Não iniciada';
-  return {autoProgress, manualProgress, status};
+  const savedManual   = progress[`ms_${ms.id}`]?.pct ?? null;
+  const manualOverride = hasLinkedIssues ? null : savedManual;
+  const status = ms.status || 'Não iniciada';
+  return {autoProgress, manualOverride, status};
 }
 
 /* ─── DRAG PROGRESS ──────────────────────────────────────────────────────── */
@@ -806,6 +824,22 @@ window.changeStatus = function(iid, val, sel) {
   const linkedMs = internalMilestones.find(m => (m.issueIids||[]).map(Number).includes(Number(iid)));
   if (linkedMs) progress[iid].internalMilestoneId = linkedMs.id;
   saveProgress(); saveToCentralData(); render();
+};
+
+/* Altera o status de uma milestone interna diretamente na grade (sem abrir o modal) */
+window.changeMsStatus = function(msId, val, sel) {
+  const idx = internalMilestones.findIndex(m => m.id === msId);
+  if (idx === -1) return;
+  internalMilestones[idx] = { ...internalMilestones[idx], status: val };
+  if (val === 'Concluída') {
+    // Status concluído manualmente também fixa o progresso em 100%,
+    // igual ao comportamento já existente para issues individuais.
+    if (!progress[`ms_${msId}`]) progress[`ms_${msId}`] = {};
+    progress[`ms_${msId}`].pct       = 100;
+    progress[`ms_${msId}`].projectId = activeProjectId;
+    progress[`ms_${msId}`].updatedAt = new Date().toISOString();
+  }
+  saveMilestonesLocal(); saveProgress(); saveToCentralData(); renderMacro();
 };
 
 function makeDrag(iid, getX, el) {
@@ -868,6 +902,12 @@ window.startDragTouch = function(e, iid) {
 
 window.startMsDrag = function(e, msId) {
   e.preventDefault();
+  const ms = internalMilestones.find(m=>m.id===msId);
+  if (ms?.issueIids?.length) {
+    // Progresso é automático (vem das issues) — arrasto manual desabilitado.
+    flashAutoProgressHint(msId);
+    return;
+  }
   const track = e.currentTarget;
   const onMove = ev => {
     const rect = track.getBoundingClientRect();
@@ -875,7 +915,6 @@ window.startMsDrag = function(e, msId) {
     if (!progress[`ms_${msId}`]) progress[`ms_${msId}`]={};
     progress[`ms_${msId}`].pct=p; progress[`ms_${msId}`].projectId=activeProjectId;
     const fill=track.querySelector('.prog-fill'), label=track.querySelector('.prog-label');
-    const ms=internalMilestones.find(m=>m.id===msId);
     const color=ms?.color||'var(--blue)';
     if(fill){fill.style.width=p+'%';fill.style.background=color;}
     if(label) label.textContent=p+'%';
@@ -886,6 +925,11 @@ window.startMsDrag = function(e, msId) {
   document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
 };
 window.startMsDragTouch = function(e, msId) {
+  const ms = internalMilestones.find(m=>m.id===msId);
+  if (ms?.issueIids?.length) {
+    flashAutoProgressHint(msId);
+    return;
+  }
   const track=e.currentTarget;
   const onMove=ev=>{
     const t=ev.touches[0], rect=track.getBoundingClientRect();
@@ -900,6 +944,15 @@ window.startMsDragTouch = function(e, msId) {
   document.addEventListener('touchmove',onMove,{passive:false});
   document.addEventListener('touchend',onEnd);
 };
+
+/* Pequeno feedback visual quando o usuário tenta arrastar uma barra de
+   progresso que é controlada automaticamente pelas issues vinculadas. */
+function flashAutoProgressHint(msId) {
+  const track = document.querySelector(`.macro-prog-track[data-ms-id="${msId}"]`);
+  if (!track) return;
+  track.classList.add('prog-locked-flash');
+  setTimeout(() => track.classList.remove('prog-locked-flash'), 400);
+}
 
 /* ─── MODAL: MILESTONES ──────────────────────────────────────────────────── */
 window.openMsModal = function() {
