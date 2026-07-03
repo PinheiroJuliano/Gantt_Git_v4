@@ -28,6 +28,16 @@
         <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
         <button class="btn btn-icon" id="btnConfig" onclick="openCfgModal()" title="Configurações">⚙</button>
         <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
+        <!-- USER WIDGET -->
+        <div class="user-widget" id="userWidget" style="display:none">
+            <button class="user-avatar" id="userAvatarBtn" onclick="toggleUserDropdown()" title="Meu perfil"></button>
+            <div class="user-dropdown" id="userDropdown">
+                <div class="user-dropdown-name" id="userDropdownName">—</div>
+                <div class="user-dropdown-email" id="userDropdownEmail">—</div>
+                <div class="user-dropdown-divider"></div>
+                <button class="user-dropdown-logout" onclick="doLogout()">⏻ Sair</button>
+            </div>
+        </div>
     </div>
 </header>
 
@@ -266,6 +276,72 @@
     <button class="fab-btn" id="fabIssues" onclick="switchView('issues')" title="Visão de issues">≡ Issues</button>
 </div>
 
+<!-- =============================================
+     TELA DE LOGIN / CADASTRO (Overlay)
+     ============================================= -->
+<div id="loginScreen" style="display:none">
+    <div class="login-bg-blur"></div>
+    <div class="login-card">
+        <div class="login-logo">▦</div>
+        <h2 class="login-title">Gantt EPC</h2>
+        <p class="login-subtitle">Gestão de cronogramas e issues</p>
+
+        <!-- Abas -->
+        <div class="login-tabs" id="loginTabs">
+            <button class="login-tab active" id="tabLogin" onclick="switchLoginTab('login')">Entrar</button>
+            <button class="login-tab" id="tabRegister" onclick="switchLoginTab('register')">Cadastrar-se</button>
+        </div>
+
+        <!-- Formulário de Login -->
+        <div id="formLogin">
+            <div class="login-field">
+                <label class="login-label">E-mail</label>
+                <input type="email" id="loginEmail" class="login-input" placeholder="seu@email.com" autocomplete="email" />
+            </div>
+            <div class="login-field">
+                <label class="login-label">Senha</label>
+                <input type="password" id="loginPassword" class="login-input" placeholder="••••••••" autocomplete="current-password" />
+            </div>
+            <div class="login-error" id="loginError"></div>
+            <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar</button>
+        </div>
+
+        <!-- Formulário de Cadastro -->
+        <div id="formRegister" style="display:none">
+            <div class="login-field">
+                <label class="login-label">Nome completo</label>
+                <input type="text" id="registerName" class="login-input" placeholder="Seu nome" autocomplete="name" />
+            </div>
+            <div class="login-field">
+                <label class="login-label">E-mail</label>
+                <input type="email" id="registerEmail" class="login-input" placeholder="seu@email.com" autocomplete="email" />
+            </div>
+            <div class="login-field">
+                <label class="login-label">Senha</label>
+                <input type="password" id="registerPassword" class="login-input" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+            </div>
+            <div class="login-field">
+                <label class="login-label">Confirmar senha</label>
+                <input type="password" id="registerConfirm" class="login-input" placeholder="Repita a senha" autocomplete="new-password" />
+            </div>
+            <div class="login-error" id="registerError"></div>
+            <button class="login-btn" id="registerBtn" onclick="doRegister()">Criar conta</button>
+        </div>
+    </div>
+</div>
+
+<!-- =============================================
+     TELA DE APROVAÇÃO PENDENTE
+     ============================================= -->
+<div id="pendingScreen" style="display:none">
+    <div class="pending-card">
+        <div class="pending-icon">⏳</div>
+        <h2 class="pending-title">Cadastro recebido!</h2>
+        <p class="pending-msg">Seu acesso ainda não foi liberado. Um administrador irá analisar seu cadastro e configurar quais projetos você poderá visualizar.<br><br>Por favor, tente novamente mais tarde.</p>
+        <button class="login-btn" style="margin-top:24px" onclick="doLogout()">⏻ Sair</button>
+    </div>
+</div>
+
 <script>
   window.__API_CONFIG__ = {
     token:        "glpat-JfjiRCcpVzfMx3VSLofR",
@@ -283,6 +359,7 @@
   };
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 <script src="script.js"></script>
 </body>

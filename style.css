@@ -697,3 +697,210 @@ input[type="text"], input[type="password"], input[type="date"], select {
 .macro-prog-track[data-ms-id] {
   position: relative;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTH — LOGIN SCREEN, PENDING SCREEN & USER WIDGET
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Login Screen Overlay ─────────────────────────────────────────────────── */
+#loginScreen {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  animation: auth-fadein 0.35s ease;
+}
+@keyframes auth-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Login Card ───────────────────────────────────────────────────────────── */
+.login-card {
+  width: min(400px, 94vw);
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  padding: 36px 36px 32px;
+  box-shadow: 0 24px 72px rgba(0,0,0,0.18);
+  animation: auth-slidein 0.38s cubic-bezier(0.22,1,0.36,1);
+  position: relative; z-index: 1;
+}
+@keyframes auth-slidein {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.login-logo {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 32px; text-align: center;
+  color: var(--blue); margin-bottom: 8px;
+  line-height: 1;
+}
+.login-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 18px; font-weight: 700;
+  text-align: center; color: var(--text);
+  margin-bottom: 4px;
+}
+.login-subtitle {
+  font-size: 11px; text-align: center;
+  color: var(--text3); margin-bottom: 24px;
+}
+
+/* ── Login Tabs ───────────────────────────────────────────────────────────── */
+.login-tabs {
+  display: flex; gap: 0;
+  border-bottom: 2px solid var(--border2);
+  margin-bottom: 24px;
+}
+.login-tab {
+  flex: 1; background: none; border: none;
+  padding: 8px 0; font-size: 12px; font-weight: 600;
+  color: var(--text3); cursor: pointer;
+  font-family: 'IBM Plex Sans', sans-serif;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.login-tab:hover { color: var(--text); }
+.login-tab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
+/* ── Login Fields ─────────────────────────────────────────────────────────── */
+.login-field { margin-bottom: 14px; }
+.login-label {
+  display: block; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text2); margin-bottom: 5px;
+}
+.login-input {
+  width: 100%; padding: 9px 12px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border2); border-radius: var(--r);
+  font-size: 12.5px; font-family: 'IBM Plex Sans', sans-serif;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.login-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+}
+
+/* ── Error Message ────────────────────────────────────────────────────────── */
+.login-error {
+  font-size: 11px; color: var(--red);
+  min-height: 16px; margin-bottom: 10px;
+  animation: none;
+}
+.login-error:not(:empty) {
+  animation: auth-shake 0.35s ease;
+}
+@keyframes auth-shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  60%      { transform: translateX(5px); }
+}
+
+/* ── Login Button ─────────────────────────────────────────────────────────── */
+.login-btn {
+  width: 100%; padding: 10px 16px;
+  background: var(--blue); color: #fff;
+  border: none; border-radius: var(--r);
+  font-size: 13px; font-weight: 600;
+  font-family: 'IBM Plex Sans', sans-serif;
+  cursor: pointer; margin-top: 4px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.login-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.login-btn:active:not(:disabled) { transform: translateY(0); }
+.login-btn:disabled {
+  opacity: 0.55; cursor: not-allowed; transform: none;
+}
+
+/* ── Pending Screen ───────────────────────────────────────────────────────── */
+#pendingScreen {
+  position: fixed; inset: 0; z-index: 8500;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  animation: auth-fadein 0.35s ease;
+}
+.pending-card {
+  width: min(440px, 92vw);
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  padding: 48px 36px 40px;
+  text-align: center;
+  box-shadow: 0 24px 72px rgba(0,0,0,0.16);
+  animation: auth-slidein 0.38s cubic-bezier(0.22,1,0.36,1);
+}
+.pending-icon {
+  font-size: 48px; margin-bottom: 16px;
+  animation: pending-pulse 2.4s ease-in-out infinite;
+}
+@keyframes pending-pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(0.92); }
+}
+.pending-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 20px; font-weight: 700;
+  color: var(--text); margin-bottom: 14px;
+}
+.pending-msg {
+  font-size: 13px; color: var(--text2);
+  line-height: 1.7; max-width: 340px; margin: 0 auto;
+}
+
+/* ── User Widget (header avatar + dropdown) ───────────────────────────────── */
+.user-widget {
+  position: relative;
+}
+.user-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%; border: 2px solid var(--border2);
+  background: var(--blue); color: #fff;
+  font-size: 13px; font-weight: 700;
+  font-family: 'IBM Plex Sans', sans-serif;
+  cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  transition: border-color 0.15s, transform 0.15s;
+  padding: 0; line-height: 1;
+}
+.user-avatar:hover {
+  border-color: var(--blue); transform: scale(1.06);
+}
+.user-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: 220px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  padding: 12px 0 8px;
+  z-index: 9100;
+  display: none;
+  animation: auth-fadein 0.2s ease;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown-name {
+  padding: 0 14px 2px;
+  font-size: 13px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.user-dropdown-email {
+  padding: 0 14px 10px;
+  font-size: 11px; color: var(--text3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.user-dropdown-divider {
+  height: 1px; background: var(--border2); margin: 0 0 6px;
+}
+.user-dropdown-logout {
+  width: 100%; background: none; border: none;
+  padding: 7px 14px; text-align: left;
+  font-size: 12px; font-weight: 500; color: var(--red);
+  cursor: pointer; font-family: 'IBM Plex Sans', sans-serif;
+  transition: background 0.1s;
+}
+.user-dropdown-logout:hover { background: var(--red-bg); }

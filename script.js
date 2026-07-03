@@ -5,6 +5,7 @@ const STORE_CFG       = 'gantt_cfg_v2';
 const STORE_PROG      = 'gantt_prog_v2';
 const STORE_PROJECTS  = 'gantt_projects_v1';
 const STORE_ACTIVE    = 'gantt_active_project_v1';
+const ADMIN_EMAIL     = 'pisjuliano@gmail.com';
 
 const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
 
@@ -31,6 +32,10 @@ let internalMilestones= [];
 let timeline          = null;
 let macroTimeline     = null;
 let db                = null;
+
+/* Auth state */
+let currentUser  = null;  // firebase.User
+let userProfile  = null;  // { role, allowedProjects, displayName }
 
 /* ─── MULTI-PROJECT STATE ────────────────────────────────────────────────── */
 /*
@@ -123,6 +128,173 @@ function projectDocId() {
   if (!proj) return 'database';
   return `project_${proj.id}`;
 }
+
+/* ─── AUTH ─────────────────────────────────────────────────────────────────── */
+
+/* Mostra/oculta as telas principais do app */
+function showAppUI()     { document.getElementById('loginScreen')?.style && (document.getElementById('loginScreen').style.display = 'none');   document.getElementById('pendingScreen')?.style && (document.getElementById('pendingScreen').style.display = 'none'); }
+function showLoginUI()   { document.getElementById('loginScreen').style.display = '';  document.getElementById('pendingScreen').style.display = 'none'; }
+function showPendingUI() { document.getElementById('loginScreen').style.display = 'none'; document.getElementById('pendingScreen').style.display = ''; }
+
+/* Alterna entre as abas Entrar / Cadastrar-se */
+window.switchLoginTab = function(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('formLogin').style.display    = isLogin ? '' : 'none';
+  document.getElementById('formRegister').style.display = isLogin ? 'none' : '';
+  document.getElementById('tabLogin').classList.toggle('active', isLogin);
+  document.getElementById('tabRegister').classList.toggle('active', !isLogin);
+  document.getElementById('loginError').textContent    = '';
+  document.getElementById('registerError').textContent = '';
+};
+
+/* Mensagens de erro inline */
+function setLoginError(msg)    { document.getElementById('loginError').textContent    = msg; }
+function setRegisterError(msg) { document.getElementById('registerError').textContent = msg; }
+
+/* Traduz códigos de erro do Firebase para português */
+function authErrMsg(code) {
+  const map = {
+    'auth/invalid-email':          'E-mail inválido.',
+    'auth/user-not-found':         'Usuário não encontrado.',
+    'auth/wrong-password':         'Senha incorreta.',
+    'auth/invalid-credential':     'E-mail ou senha incorretos.',
+    'auth/email-already-in-use':   'Este e-mail já está cadastrado.',
+    'auth/weak-password':          'Senha muito fraca. Use ao menos 6 caracteres.',
+    'auth/too-many-requests':      'Muitas tentativas. Tente novamente em alguns minutos.',
+    'auth/network-request-failed': 'Erro de conexão. Verifique sua internet.',
+  };
+  return map[code] || `Erro: ${code}`;
+}
+
+/* Seta o estado de loading no botão */
+function setBtnLoading(id, loading, originalText) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Aguarde…' : originalText;
+}
+
+/* Cria o documento do usuário no Firestore com role "pending" */
+async function createUserProfile(user, displayName) {
+  if (!db) return;
+  try {
+    const email = user.email.toLowerCase();
+    const role  = (email === ADMIN_EMAIL.toLowerCase()) ? 'admin' : 'pending';
+    await db.collection('gantt').doc('users').collection('items').doc(email).set({
+      displayName: displayName || user.displayName || email.split('@')[0],
+      email,
+      role,
+      allowedProjects: [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log('Perfil criado:', email, '| role:', role);
+  } catch(e) { console.error('Erro ao criar perfil:', e); }
+}
+
+/* Lê o documento do usuário no Firestore */
+async function loadUserProfile(user) {
+  if (!db || !user) return null;
+  try {
+    const email = user.email.toLowerCase();
+    const snap  = await db.collection('gantt').doc('users').collection('items').doc(email).get();
+    if (snap.exists) return snap.data();
+
+    // Documento ainda não existe (primeiro login via link externo ou admin criou direto no Auth)
+    // Cria automaticamente como 'pending'
+    await createUserProfile(user, user.displayName || '');
+    return { role: 'pending', allowedProjects: [], displayName: user.email.split('@')[0] };
+  } catch(e) { console.error('Erro ao carregar perfil:', e); return null; }
+}
+
+/* Filtra a lista global de projetos pelas permissões do usuário */
+function applyUserPermissions(profile) {
+  if (!profile || profile.role === 'admin') return; // admin vê tudo
+  if (profile.role === 'user' && Array.isArray(profile.allowedProjects)) {
+    projects = projects.filter(p => profile.allowedProjects.includes(p.id));
+    // Ajusta o projeto ativo se o que estava selecionado não for mais acessível
+    if (activeProjectId && !projects.find(p => p.id === activeProjectId)) {
+      activeProjectId = projects.length ? projects[0].id : null;
+    }
+  }
+}
+
+/* Atualiza o widget de avatar no header */
+function updateUserWidget(user, profile) {
+  const widget = document.getElementById('userWidget');
+  if (!widget || !user) return;
+  const name   = profile?.displayName || user.displayName || user.email.split('@')[0];
+  const letter = name.charAt(0).toUpperCase();
+  const btn    = document.getElementById('userAvatarBtn');
+  if (btn) btn.textContent = letter;
+  const nameEl  = document.getElementById('userDropdownName');
+  const emailEl = document.getElementById('userDropdownEmail');
+  if (nameEl)  nameEl.textContent  = name;
+  if (emailEl) emailEl.textContent = user.email;
+  widget.style.display = '';
+}
+
+/* Abre/fecha o dropdown do usuário */
+window.toggleUserDropdown = function() {
+  const dd = document.getElementById('userDropdown');
+  if (dd) dd.classList.toggle('open');
+};
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', (e) => {
+  const widget = document.getElementById('userWidget');
+  const dd     = document.getElementById('userDropdown');
+  if (dd && widget && !widget.contains(e.target)) dd.classList.remove('open');
+});
+
+/* Login com e-mail e senha */
+window.doLogin = async function() {
+  setLoginError('');
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { setLoginError('Preencha todos os campos.'); return; }
+  setBtnLoading('loginBtn', true, 'Entrar');
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+    // onAuthStateChanged cuida do resto
+  } catch(e) {
+    setLoginError(authErrMsg(e.code));
+    setBtnLoading('loginBtn', false, 'Entrar');
+  }
+};
+
+/* Cadastro de novo usuário */
+window.doRegister = async function() {
+  setRegisterError('');
+  const name     = document.getElementById('registerName').value.trim();
+  const email    = document.getElementById('registerEmail').value.trim();
+  const password = document.getElementById('registerPassword').value;
+  const confirm  = document.getElementById('registerConfirm').value;
+  if (!name || !email || !password || !confirm) { setRegisterError('Preencha todos os campos.'); return; }
+  if (password !== confirm) { setRegisterError('As senhas não coincidem.'); return; }
+  if (password.length < 6)  { setRegisterError('A senha deve ter ao menos 6 caracteres.'); return; }
+  setBtnLoading('registerBtn', true, 'Criar conta');
+  try {
+    const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    await cred.user.updateProfile({ displayName: name });
+    await createUserProfile(cred.user, name);
+    // onAuthStateChanged cuida do resto
+  } catch(e) {
+    setRegisterError(authErrMsg(e.code));
+    setBtnLoading('registerBtn', false, 'Criar conta');
+  }
+};
+
+/* Logout */
+window.doLogout = async function() {
+  const dd = document.getElementById('userDropdown');
+  if (dd) dd.classList.remove('open');
+  await firebase.auth().signOut();
+  // Limpa estado local
+  projects = []; activeProjectId = null; progress = {};
+  internalMilestones = []; allIssues = []; currentUser = null; userProfile = null;
+  document.getElementById('userWidget').style.display = 'none';
+  showLoginUI();
+};
 
 /* ─── CONFIG (compatibilidade) ───────────────────────────────────────────── */
 const DEFAULT_CFG = {
@@ -1307,15 +1479,23 @@ async function loadCredentials() {
 }
 
 /* ─── INIT ──────────────────────────────────────────────────────────────── */
-async function inicializarApp() {
-  loadProjectsLocal();
-  loadProgress();
-  loadMilestonesLocal();
 
-  // 1) Descobre a config "global" do Firebase (mesma para qualquer dispositivo,
-  //    vem do config.json / __API_CONFIG__) e conecta nela ANTES de saber
-  //    qual projeto está ativo — é essa conexão que permite buscar a lista
-  //    de projetos cadastrados na nuvem.
+/* Registra event listeners dos filtros — chamado uma vez após o auth */
+function setupFilterListeners() {
+  ['filterSearch','filterStatus','filterFrom','filterTo'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.addEventListener('input',render);
+  });
+  const fState=document.getElementById('filterState');
+  if (fState) fState.addEventListener('change',()=>{ if(allIssues.length) loadFromAPI(); });
+  ['macroFrom','macroTo','macroSearch'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.addEventListener('input',renderMacro);
+  });
+}
+
+/* Inicializa o Firebase (Auth + Firestore) e registra o listener de sessão */
+async function inicializarApp() {
+
+  // 1) Descobre a config global do Firebase e inicializa SDK
   let apiCfg = window.__API_CONFIG__ || null;
   let fileCfg = null;
   try {
@@ -1330,45 +1510,77 @@ async function inicializarApp() {
 
   initFirebase(globalFirebaseCfg);
 
-  // 2) Tenta puxar a lista de projetos da nuvem. Se existir, ela "ganha" da
-  //    lista local (que pode estar desatualizada ou vazia neste dispositivo).
-  const gotFromCloud = await loadProjectsFromCloud();
+  // 2) Exibe a tela de login enquanto aguarda a verificação de sessão
+  showLoginUI();
 
-  // 3) Garante que existe ao menos o projeto padrão (caso seja a 1ª vez,
-  //    em qualquer dispositivo, e ainda não haja nada na nuvem).
-  const cfgAtivo = await loadCredentials();
+  // 3) Observa mudanças de autenticação — Firebase mantém a sessão automaticamente
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if (!user) {
+      // Sem sessão ativa — mostra tela de login e limpa estado
+      showLoginUI();
+      document.getElementById('userWidget').style.display = 'none';
+      return;
+    }
 
-  // 4) Se o Firebase do projeto ativo for diferente do "global" (caso raro,
-  //    projeto antigo com firebaseConfig próprio), troca a conexão para ele.
-  const projFirebase = getActiveProject()?.firebaseConfig || globalFirebaseCfg;
-  if (projFirebase !== globalFirebaseCfg) initFirebase(projFirebase);
+    // Sessão ativa — carrega perfil do usuário
+    currentUser = user;
+    userProfile = await loadUserProfile(user);
 
-  // 5) Se acabamos de criar o projeto padrão agora (não veio da nuvem),
-  //    sobe ele imediatamente para o registro central.
-  if (!gotFromCloud && projects.length) await saveProjectsToCloud();
+    if (!userProfile || userProfile.role === 'pending') {
+      // Usuário ainda não aprovado
+      updateUserWidget(user, userProfile);
+      showPendingUI();
+      return;
+    }
 
-  await loadCentralData();
+    // Usuário aprovado (role == 'user' ou 'admin') — inicia o app
+    showAppUI();
+    updateUserWidget(user, userProfile);
 
-  renderProjectSelector();
-  updateProjectBadge();
+    // 4) Carrega projetos (local → nuvem) e aplica permissões
+    loadProjectsLocal();
+    loadProgress();
+    loadMilestonesLocal();
 
-  if (cfgAtivo?.token) {
-    loadFromAPI();
-  } else {
-    const localCfg = loadCfg();
-    if (localCfg?.token) loadFromAPI();
-  }
+    const gotFromCloud = await loadProjectsFromCloud();
 
-  switchView('macro');
+    const cfgAtivo = await loadCredentials();
 
-  ['filterSearch','filterStatus','filterFrom','filterTo'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.addEventListener('input',render);
-  });
-  const fState=document.getElementById('filterState');
-  if (fState) fState.addEventListener('change',()=>{ if(allIssues.length) loadFromAPI(); });
-  ['macroFrom','macroTo','macroSearch'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.addEventListener('input',renderMacro);
+    const projFirebase = getActiveProject()?.firebaseConfig || globalFirebaseCfg;
+    if (projFirebase !== globalFirebaseCfg) initFirebase(projFirebase);
+
+    if (!gotFromCloud && projects.length) await saveProjectsToCloud();
+
+    // 5) Aplica filtro de projetos por permissão do usuário
+    applyUserPermissions(userProfile);
+
+    await loadCentralData();
+
+    renderProjectSelector();
+    updateProjectBadge();
+
+    if (cfgAtivo?.token) {
+      loadFromAPI();
+    } else {
+      const localCfg = loadCfg();
+      if (localCfg?.token) loadFromAPI();
+    }
+
+    switchView('macro');
+    setupFilterListeners();
   });
 }
 
+// Suporte a Enter nos campos de login
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const loginVisible    = document.getElementById('formLogin')?.style.display !== 'none'
+                          && document.getElementById('loginScreen')?.style.display !== 'none';
+  const registerVisible = document.getElementById('formRegister')?.style.display !== 'none'
+                          && document.getElementById('loginScreen')?.style.display !== 'none';
+  if (loginVisible)    window.doLogin();
+  if (registerVisible) window.doRegister();
+});
+
 inicializarApp();
+
