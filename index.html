@@ -1,366 +1,389 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gantt EPC</title>
+    <title>Gantt Chart - GitLab</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<header>
-    <div class="header-left">
-        <h1>▦ Gantt EPC</h1>
-        <span class="ms-pill" id="msBadge">—</span>
-        <!-- SELETOR DE PROJETOS -->
-        <div class="proj-selector" id="projectSelectorWrap"></div>
-        <!-- BREADCRUMB: aparece no drill-down -->
-        <nav class="breadcrumb" id="breadcrumb" style="display:none">
-            <button class="breadcrumb-back" onclick="exitDrill()">← Voltar</button>
-            <span class="breadcrumb-sep">/</span>
-            <span class="breadcrumb-current" id="breadcrumbLabel">—</span>
-        </nav>
-    </div>
-    <div class="header-right">
-        <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
-        <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
-        <button class="btn btn-icon" id="btnConfig" onclick="openCfgModal()" title="Configurações">⚙</button>
-        <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
-        <!-- USER WIDGET -->
-        <div class="user-widget" id="userWidget" style="display:none">
-            <button class="user-avatar" id="userAvatarBtn" onclick="toggleUserDropdown()" title="Meu perfil"></button>
-            <div class="user-dropdown" id="userDropdown">
-                <div class="user-dropdown-name" id="userDropdownName">—</div>
-                <div class="user-dropdown-email" id="userDropdownEmail">—</div>
-                <div class="user-dropdown-divider"></div>
-                <button class="user-dropdown-logout" onclick="doLogout()">⏻ Sair</button>
+    <header>
+        <div class="header-left">
+            <h1>▦ Gantt Chart - GitLab</h1>
+            <span class="ms-pill" id="msBadge">—</span>
+            <!-- SELETOR DE PROJETOS -->
+            <div class="proj-selector" id="projectSelectorWrap"></div>
+            <!-- BREADCRUMB: aparece no drill-down -->
+            <nav class="breadcrumb" id="breadcrumb" style="display:none">
+                <button class="breadcrumb-back" onclick="exitDrill()">← Voltar</button>
+                <span class="breadcrumb-sep">/</span>
+                <span class="breadcrumb-current" id="breadcrumbLabel">—</span>
+            </nav>
+        </div>
+        <div class="header-right">
+            <span id="saveIndicator" style="font-size:10px;color:var(--text3)"></span>
+            <button class="btn" id="btnReload" onclick="loadFromAPI()" style="display:none">↺ Recarregar</button>
+            <button class="btn btn-icon" id="btnConfig" onclick="openCfgModal()" title="Configurações">⚙</button>
+            <button class="btn" id="btnMilestones" onclick="openMsModal()">⊞ Milestones</button>
+            <!-- USER WIDGET -->
+            <div class="user-widget" id="userWidget" style="display:none">
+                <button class="user-avatar" id="userAvatarBtn" onclick="toggleUserDropdown()"
+                    title="Meu perfil"></button>
+                <div class="user-dropdown" id="userDropdown">
+                    <div class="user-dropdown-name" id="userDropdownName">—</div>
+                    <div class="user-dropdown-email" id="userDropdownEmail">—</div>
+                    <div class="user-dropdown-divider"></div>
+                    <button class="user-dropdown-logout" onclick="doLogout()">⏻ Sair</button>
+                </div>
             </div>
         </div>
+    </header>
+
+    <div class="api-config-bar" id="configBar" style="display:none"></div>
+
+    <!-- TOOLBAR (issues) -->
+    <div class="config-bar" id="issueToolbar">
+        <label class="toolbar-label">Filtros</label>
+        <input type="date" id="filterFrom" title="Data inicial" />
+        <input type="date" id="filterTo" title="Data final" />
+        <button class="btn" onclick="changeWeek(-7)">◀</button>
+        <button class="btn" onclick="changeWeek(7)">▶</button>
+        <select id="filterStatus">
+            <option value="">Todos status</option>
+            <option value="Andamento">Andamento</option>
+            <option value="Pausada">Pausada</option>
+            <option value="Concluída">Concluída</option>
+            <option value="Aguardando">Aguardando</option>
+        </select>
+        <select id="filterState">
+            <option value="opened">Em aberto</option>
+            <option value="">Todos</option>
+            <option value="closed">Fechadas</option>
+        </select>
+        <input type="text" id="filterSearch" placeholder="Buscar #ID ou título…" style="min-width:170px" />
+        <button class="btn" onclick="resetFilters()">↺ Resetar</button>
+        <span id="filterCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
+        <button class="btn primary" onclick="loadFromAPI()">▶ Carregar</button>
+        <span id="api-status" class="warn">⚠ Configure</span>
     </div>
-</header>
 
-<div class="api-config-bar" id="configBar" style="display:none"></div>
+    <!-- TOOLBAR (macro milestones) -->
+    <div class="config-bar" id="macroToolbar" style="display:none">
+        <label class="toolbar-label">Linha do Tempo</label>
+        <input type="date" id="macroFrom" title="Data inicial" />
+        <input type="date" id="macroTo" title="Data final" />
+        <button class="btn" onclick="changeMacroWeek(-30)">◀</button>
+        <button class="btn" onclick="changeMacroWeek(30)">▶</button>
+        <input type="text" id="macroSearch" placeholder="Buscar milestone…" style="min-width:170px" />
+        <button class="btn" onclick="resetMacroFilters()">↺ Resetar</button>
+        <span id="macroCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
+    </div>
 
-<!-- TOOLBAR (issues) -->
-<div class="config-bar" id="issueToolbar">
-    <label class="toolbar-label">Filtros</label>
-    <input type="date" id="filterFrom" title="Data inicial" />
-    <input type="date" id="filterTo" title="Data final" />
-    <button class="btn" onclick="changeWeek(-7)">◀</button>
-    <button class="btn" onclick="changeWeek(7)">▶</button>
-    <select id="filterStatus">
-        <option value="">Todos status</option>
-        <option value="Andamento">Andamento</option>
-        <option value="Pausada">Pausada</option>
-        <option value="Concluída">Concluída</option>
-        <option value="Aguardando">Aguardando</option>
-    </select>
-    <select id="filterState">
-        <option value="opened">Em aberto</option>
-        <option value="">Todos</option>
-        <option value="closed">Fechadas</option>
-    </select>
-    <input type="text" id="filterSearch" placeholder="Buscar #ID ou título…" style="min-width:170px" />
-    <button class="btn" onclick="resetFilters()">↺ Resetar</button>
-    <span id="filterCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
-    <button class="btn primary" onclick="loadFromAPI()">▶ Carregar</button>
-    <span id="api-status" class="warn">⚠ Configure</span>
-</div>
+    <!-- SUMMARY -->
+    <div class="summary" id="summary"></div>
 
-<!-- TOOLBAR (macro milestones) -->
-<div class="config-bar" id="macroToolbar" style="display:none">
-    <label class="toolbar-label">Linha do Tempo</label>
-    <input type="date" id="macroFrom" title="Data inicial" />
-    <input type="date" id="macroTo" title="Data final" />
-    <button class="btn" onclick="changeMacroWeek(-30)">◀</button>
-    <button class="btn" onclick="changeMacroWeek(30)">▶</button>
-    <input type="text" id="macroSearch" placeholder="Buscar milestone…" style="min-width:170px" />
-    <button class="btn" onclick="resetMacroFilters()">↺ Resetar</button>
-    <span id="macroCount" style="margin-left:auto;font-size:10px;color:var(--text3)"></span>
-</div>
+    <!-- MACRO VIEW -->
+    <div class="wrap" id="macroWrap" style="display:none">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:32px"></th>
+                    <th style="min-width:280px">Milestone</th>
+                    <th style="width:72px">Início</th>
+                    <th style="width:72px">Fim</th>
+                    <th style="width:100px">Status</th>
+                    <th style="width:106px" class="progress-col">
+                        Progresso <span
+                            style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
+                    </th>
+                    <th class="bar-th">
+                        <div id="macroTlHeader" class="tl-header"></div>
+                        Linha do Tempo
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="macroBody">
+                <tr>
+                    <td colspan="7" class="no-data">Nenhuma milestone cadastrada. Clique em ⊞ Milestones.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
-<!-- SUMMARY -->
-<div class="summary" id="summary"></div>
+    <!-- ISSUES VIEW -->
+    <div class="wrap" id="issuesWrap">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:52px">#</th>
+                    <th style="min-width:300px">Título</th>
+                    <th style="width:72px">Início</th>
+                    <th style="width:72px">Fim</th>
+                    <th style="width:100px">Status</th>
+                    <th style="width:106px" class="progress-col">
+                        Progresso <span
+                            style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
+                    </th>
+                    <th class="bar-th">
+                        <div id="tlHeader" class="tl-header"></div>
+                        Linha do Tempo
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="ganttBody">
+                <tr>
+                    <td colspan="7" class="no-data">Configure a API do GitLab acima.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 
-<!-- MACRO VIEW -->
-<div class="wrap" id="macroWrap" style="display:none">
-    <table>
-        <thead>
-            <tr>
-                <th style="width:32px"></th>
-                <th style="min-width:280px">Milestone</th>
-                <th style="width:72px">Início</th>
-                <th style="width:72px">Fim</th>
-                <th style="width:100px">Status</th>
-                <th style="width:106px" class="progress-col">
-                    Progresso <span style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
-                </th>
-                <th class="bar-th">
-                    <div id="macroTlHeader" class="tl-header"></div>
-                    Linha do Tempo
-                </th>
-            </tr>
-        </thead>
-        <tbody id="macroBody">
-            <tr><td colspan="7" class="no-data">Nenhuma milestone cadastrada. Clique em ⊞ Milestones.</td></tr>
-        </tbody>
-    </table>
-</div>
-
-<!-- ISSUES VIEW -->
-<div class="wrap" id="issuesWrap">
-    <table>
-        <thead>
-            <tr>
-                <th style="width:52px">#</th>
-                <th style="min-width:300px">Título</th>
-                <th style="width:72px">Início</th>
-                <th style="width:72px">Fim</th>
-                <th style="width:100px">Status</th>
-                <th style="width:106px" class="progress-col">
-                    Progresso <span style="font-weight:400;opacity:.6;text-transform:none;letter-spacing:0">(arraste)</span>
-                </th>
-                <th class="bar-th">
-                    <div id="tlHeader" class="tl-header"></div>
-                    Linha do Tempo
-                </th>
-            </tr>
-        </thead>
-        <tbody id="ganttBody">
-            <tr><td colspan="7" class="no-data">Configure a API do GitLab acima.</td></tr>
-        </tbody>
-    </table>
-</div>
-
-<!-- =============================================
+    <!-- =============================================
      MODAL: Lista de Milestones Internas
      ============================================= -->
-<div class="modal-backdrop" id="msModalBackdrop" onclick="closeMsModal()" style="display:none"></div>
-<div class="modal" id="msModal" style="display:none">
-    <div class="modal-header">
-        <h2 class="modal-title">⊞ Milestones Internas</h2>
-        <button class="modal-close" onclick="closeMsModal()">✕</button>
+    <div class="modal-backdrop" id="msModalBackdrop" onclick="closeMsModal()" style="display:none"></div>
+    <div class="modal" id="msModal" style="display:none">
+        <div class="modal-header">
+            <h2 class="modal-title">⊞ Milestones Internas</h2>
+            <button class="modal-close" onclick="closeMsModal()">✕</button>
+        </div>
+        <div class="modal-section" id="msList">
+            <p class="modal-empty" id="msListEmpty">Nenhuma milestone cadastrada ainda.</p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-new-ms" onclick="openMsFormModal(null)">＋ Nova Milestone</button>
+        </div>
     </div>
-    <div class="modal-section" id="msList">
-        <p class="modal-empty" id="msListEmpty">Nenhuma milestone cadastrada ainda.</p>
-    </div>
-    <div class="modal-footer">
-        <button class="btn btn-new-ms" onclick="openMsFormModal(null)">＋ Nova Milestone</button>
-    </div>
-</div>
 
-<!-- =============================================
+    <!-- =============================================
      MODAL: Formulário de Milestone (Nova / Editar)
      ============================================= -->
-<div class="modal-backdrop modal-backdrop-inner" id="msFormModalBackdrop" onclick="closeMsFormModal()" style="display:none"></div>
-<div class="modal modal-form-floating" id="msFormModal" style="display:none">
-    <div class="modal-header">
-        <h2 class="modal-title" id="msFormTitle">Nova Milestone</h2>
-        <button class="modal-close" onclick="closeMsFormModal()">✕</button>
-    </div>
-    <div class="modal-form-section">
-        <div class="form-row">
-            <div class="form-group" style="flex:2">
-                <label class="form-label">Nome *</label>
-                <input type="text" id="msName" placeholder="Ex: Implementar leitura do catálogo" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Cor</label>
-                <input type="color" id="msColor" value="#2e6fcc" style="width:100%;height:34px;padding:2px 4px;cursor:pointer" />
-            </div>
+    <div class="modal-backdrop modal-backdrop-inner" id="msFormModalBackdrop" onclick="closeMsFormModal()"
+        style="display:none"></div>
+    <div class="modal modal-form-floating" id="msFormModal" style="display:none">
+        <div class="modal-header">
+            <h2 class="modal-title" id="msFormTitle">Nova Milestone</h2>
+            <button class="modal-close" onclick="closeMsFormModal()">✕</button>
         </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">Início *</label>
-                <input type="date" id="msStart" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Fim *</label>
-                <input type="date" id="msEnd" />
-            </div>
-            <div class="form-group" style="flex:0 0 110px">
-                <label class="form-label">Status</label>
-                <select id="msStatus">
-                    <option value="Não iniciada">Não iniciada</option>
-                    <option value="Andamento">Andamento</option>
-                    <option value="Concluída">Concluída</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Issues vinculadas</label>
-            <div class="issue-picker-bar">
-                <input type="text" id="issuePickerSearch" placeholder="Filtrar por #ID ou título…" oninput="filterIssuePicker()" />
-                <span id="issuePickerCount" class="picker-count">0 selecionadas</span>
-            </div>
-            <div class="issue-picker" id="issuePicker">
-                <p class="picker-empty">Carregue as issues da API primeiro (botão ▶ Carregar).</p>
-            </div>
-        </div>
-        <div class="form-actions">
-            <button class="btn" onclick="closeMsFormModal()">Cancelar</button>
-            <button class="btn primary" onclick="saveMilestone()">Salvar milestone</button>
-        </div>
-    </div>
-</div>
-
-<!-- =============================================
-     MODAL: Configurações + Projetos
-     ============================================= -->
-<div class="modal-backdrop" id="cfgModalBackdrop" onclick="closeCfgModal()" style="display:none"></div>
-<div class="modal modal-cfg" id="cfgModal" style="display:none">
-    <div class="modal-header">
-        <h2 class="modal-title">⚙ Configurações</h2>
-        <button class="modal-close" onclick="closeCfgModal()">✕</button>
-    </div>
-
-    <div class="modal-form-section">
-
-        <!-- LISTA DE PROJETOS -->
-        <div class="modal-cfg-section-title">📁 Projetos</div>
-        <div id="cfgProjectList"></div>
-        <div style="margin-top:8px">
-            <button class="btn btn-new-ms" onclick="openNewProjectForm()">＋ Novo Projeto</button>
-        </div>
-
-        <div class="modal-cfg-separator"></div>
-
-        <!-- FORMULÁRIO DE PROJETO (novo/editar) -->
-        <div id="cfgProjForm" style="display:none">
-            <input type="hidden" id="cfgProjEditId" value="" />
-            <div class="modal-cfg-section-title" id="cfgProjFormTitle">Novo Projeto</div>
+        <div class="modal-form-section">
             <div class="form-row">
                 <div class="form-group" style="flex:2">
-                    <label class="form-label">Nome do Projeto *</label>
-                    <input type="text" id="cfgProjName" placeholder="Ex: EPC, Precatórios…" />
+                    <label class="form-label">Nome *</label>
+                    <input type="text" id="msName" placeholder="Ex: Implementar leitura do catálogo" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cor</label>
+                    <input type="color" id="msColor" value="#2e6fcc"
+                        style="width:100%;height:34px;padding:2px 4px;cursor:pointer" />
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label class="form-label">Token GitLab</label>
-                    <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label class="form-label">URL do GitLab</label>
-                    <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
-                </div>
-            </div>
-            <div class="form-row">
-                <div class="form-group" style="flex:0 0 150px">
-                    <label class="form-label">ID do Grupo</label>
-                    <input type="text" id="cfgGroup" placeholder="94" />
+                    <label class="form-label">Início *</label>
+                    <input type="date" id="msStart" />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Milestone do GitLab</label>
-                    <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
+                    <label class="form-label">Fim *</label>
+                    <input type="date" id="msEnd" />
+                </div>
+                <div class="form-group" style="flex:0 0 110px">
+                    <label class="form-label">Status</label>
+                    <select id="msStatus">
+                        <option value="Não iniciada">Não iniciada</option>
+                        <option value="Andamento">Andamento</option>
+                        <option value="Concluída">Concluída</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Issues vinculadas</label>
+                <div class="issue-picker-bar">
+                    <input type="text" id="issuePickerSearch" placeholder="Filtrar por #ID ou título…"
+                        oninput="filterIssuePicker()" />
+                    <span id="issuePickerCount" class="picker-count">0 selecionadas</span>
+                </div>
+                <div class="issue-picker" id="issuePicker">
+                    <p class="picker-empty">Carregue as issues da API primeiro (botão ▶ Carregar).</p>
                 </div>
             </div>
             <div class="form-actions">
-                <button class="btn" onclick="cancelProjForm()">Cancelar</button>
-                <button class="btn primary" onclick="saveNewProject()">✓ Salvar Projeto</button>
+                <button class="btn" onclick="closeMsFormModal()">Cancelar</button>
+                <button class="btn primary" onclick="saveMilestone()">Salvar milestone</button>
             </div>
-            <div class="modal-cfg-separator"></div>
+        </div>
+    </div>
+
+    <!-- =============================================
+     MODAL: Configurações + Projetos
+     ============================================= -->
+    <div class="modal-backdrop" id="cfgModalBackdrop" onclick="closeCfgModal()" style="display:none"></div>
+    <div class="modal modal-cfg" id="cfgModal" style="display:none">
+        <div class="modal-header">
+            <h2 class="modal-title">⚙ Configurações</h2>
+            <button class="modal-close" onclick="closeCfgModal()">✕</button>
         </div>
 
-        <p class="modal-cfg-hint">As configurações são salvas localmente no navegador.</p>
+        <div class="modal-form-section">
+
+            <!-- LISTA DE PROJETOS -->
+            <div class="modal-cfg-section-title">📁 Projetos</div>
+            <div id="cfgProjectList"></div>
+            <div style="margin-top:8px">
+                <button class="btn btn-new-ms" onclick="openNewProjectForm()">＋ Novo Projeto</button>
+            </div>
+
+            <div class="modal-cfg-separator"></div>
+
+            <!-- FORMULÁRIO DE PROJETO (novo/editar) -->
+            <div id="cfgProjForm" style="display:none">
+                <input type="hidden" id="cfgProjEditId" value="" />
+                <div class="modal-cfg-section-title" id="cfgProjFormTitle">Novo Projeto</div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label class="form-label">Nome do Projeto *</label>
+                        <input type="text" id="cfgProjName" placeholder="Ex: EPC, Precatórios…" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Token GitLab</label>
+                        <input type="password" id="cfgToken" placeholder="glpat-xxxx…" autocomplete="off" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">URL do GitLab</label>
+                        <input type="text" id="cfgUrl" placeholder="https://gitlab.4mti.com.br" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:0 0 150px">
+                        <label class="form-label">ID do Grupo</label>
+                        <input type="text" id="cfgGroup" placeholder="94" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Milestone do GitLab</label>
+                        <input type="text" id="cfgMilestone" placeholder="Cliente) Porto Seguro - EPC" />
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn" onclick="cancelProjForm()">Cancelar</button>
+                    <button class="btn primary" onclick="saveNewProject()">✓ Salvar Projeto</button>
+                </div>
+                <div class="modal-cfg-separator"></div>
+            </div>
+
+            <p class="modal-cfg-hint">As configurações são salvas localmente no navegador.</p>
+        </div>
     </div>
-</div>
 
-<!-- VIEW SWITCHER (FAB) -->
-<div class="view-fab" id="viewFab">
-    <button class="fab-btn active" id="fabMacro" onclick="switchView('macro')" title="Visão macro (milestones)">⊟ Macro</button>
-    <button class="fab-btn" id="fabIssues" onclick="switchView('issues')" title="Visão de issues">≡ Issues</button>
-</div>
+    <!-- VIEW SWITCHER (FAB) -->
+    <div class="view-fab" id="viewFab">
+        <button class="fab-btn active" id="fabMacro" onclick="switchView('macro')" title="Visão macro (milestones)">⊟
+            Macro</button>
+        <button class="fab-btn" id="fabIssues" onclick="switchView('issues')" title="Visão de issues">≡ Issues</button>
+    </div>
 
-<!-- =============================================
+    <!-- =============================================
      TELA DE LOGIN / CADASTRO (Overlay)
      ============================================= -->
-<div id="loginScreen" style="display:none">
-    <div class="login-bg-blur"></div>
-    <div class="login-card">
-        <div class="login-logo">▦</div>
-        <h2 class="login-title">Gantt EPC</h2>
-        <p class="login-subtitle">Gestão de cronogramas e issues</p>
+    <div id="loginScreen" style="display:none">
+        <div class="login-bg-blur"></div>
+        <div class="login-card">
+            <div class="login-logo">▦</div>
+            <h2 class="login-title">Gantt Chart - GitLab</h2>
+            <p class="login-subtitle">Gestão de cronogramas e issues</p>
 
-        <!-- Abas -->
-        <div class="login-tabs" id="loginTabs">
-            <button class="login-tab active" id="tabLogin" onclick="switchLoginTab('login')">Entrar</button>
-            <button class="login-tab" id="tabRegister" onclick="switchLoginTab('register')">Cadastrar-se</button>
-        </div>
+            <!-- Abas -->
+            <div class="login-tabs" id="loginTabs">
+                <button class="login-tab active" id="tabLogin" onclick="switchLoginTab('login')">Entrar</button>
+                <button class="login-tab" id="tabRegister" onclick="switchLoginTab('register')">Cadastrar-se</button>
+            </div>
 
-        <!-- Formulário de Login -->
-        <div id="formLogin">
-            <div class="login-field">
-                <label class="login-label">E-mail</label>
-                <input type="email" id="loginEmail" class="login-input" placeholder="seu@email.com" autocomplete="email" />
+            <!-- Formulário de Login -->
+            <div id="formLogin">
+                <div class="login-field">
+                    <label class="login-label">E-mail</label>
+                    <input type="email" id="loginEmail" class="login-input" placeholder="seu@email.com"
+                        autocomplete="email" />
+                </div>
+                <div class="login-field">
+                    <label class="login-label">Senha</label>
+                    <input type="password" id="loginPassword" class="login-input" placeholder="••••••••"
+                        autocomplete="current-password" />
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar</button>
             </div>
-            <div class="login-field">
-                <label class="login-label">Senha</label>
-                <input type="password" id="loginPassword" class="login-input" placeholder="••••••••" autocomplete="current-password" />
-            </div>
-            <div class="login-error" id="loginError"></div>
-            <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar</button>
-        </div>
 
-        <!-- Formulário de Cadastro -->
-        <div id="formRegister" style="display:none">
-            <div class="login-field">
-                <label class="login-label">Nome completo</label>
-                <input type="text" id="registerName" class="login-input" placeholder="Seu nome" autocomplete="name" />
+            <!-- Formulário de Cadastro -->
+            <div id="formRegister" style="display:none">
+                <div class="login-field">
+                    <label class="login-label">Nome completo</label>
+                    <input type="text" id="registerName" class="login-input" placeholder="Seu nome"
+                        autocomplete="name" />
+                </div>
+                <div class="login-field">
+                    <label class="login-label">E-mail</label>
+                    <input type="email" id="registerEmail" class="login-input" placeholder="seu@email.com"
+                        autocomplete="email" />
+                </div>
+                <div class="login-field">
+                    <label class="login-label">Senha</label>
+                    <input type="password" id="registerPassword" class="login-input" placeholder="Mínimo 6 caracteres"
+                        autocomplete="new-password" />
+                </div>
+                <div class="login-field">
+                    <label class="login-label">Confirmar senha</label>
+                    <input type="password" id="registerConfirm" class="login-input" placeholder="Repita a senha"
+                        autocomplete="new-password" />
+                </div>
+                <div class="login-error" id="registerError"></div>
+                <button class="login-btn" id="registerBtn" onclick="doRegister()">Criar conta</button>
             </div>
-            <div class="login-field">
-                <label class="login-label">E-mail</label>
-                <input type="email" id="registerEmail" class="login-input" placeholder="seu@email.com" autocomplete="email" />
-            </div>
-            <div class="login-field">
-                <label class="login-label">Senha</label>
-                <input type="password" id="registerPassword" class="login-input" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
-            </div>
-            <div class="login-field">
-                <label class="login-label">Confirmar senha</label>
-                <input type="password" id="registerConfirm" class="login-input" placeholder="Repita a senha" autocomplete="new-password" />
-            </div>
-            <div class="login-error" id="registerError"></div>
-            <button class="login-btn" id="registerBtn" onclick="doRegister()">Criar conta</button>
         </div>
     </div>
-</div>
 
-<!-- =============================================
+    <!-- =============================================
      TELA DE APROVAÇÃO PENDENTE
      ============================================= -->
-<div id="pendingScreen" style="display:none">
-    <div class="pending-card">
-        <div class="pending-icon">⏳</div>
-        <h2 class="pending-title">Cadastro recebido!</h2>
-        <p class="pending-msg">Seu acesso ainda não foi liberado. Um administrador irá analisar seu cadastro e configurar quais projetos você poderá visualizar.<br><br>Por favor, tente novamente mais tarde.</p>
-        <button class="login-btn" style="margin-top:24px" onclick="doLogout()">⏻ Sair</button>
+    <div id="pendingScreen" style="display:none">
+        <div class="pending-card">
+            <div class="pending-icon">⏳</div>
+            <h2 class="pending-title">Cadastro recebido!</h2>
+            <p class="pending-msg">Seu acesso ainda não foi liberado. Um administrador irá analisar seu cadastro e
+                configurar quais projetos você poderá visualizar.<br><br>Por favor, tente novamente mais tarde.</p>
+            <button class="login-btn" style="margin-top:24px" onclick="doLogout()">⏻ Sair</button>
+        </div>
     </div>
-</div>
 
-<script>
-  window.__API_CONFIG__ = {
-    token:        "glpat-JfjiRCcpVzfMx3VSLofR",
-    url:          "https://gitlab.4mti.com.br",
-    group:        "94",
-    milestone:    "Cliente) Porto Seguro - EPC",
-    firebaseConfig: {
-      apiKey: "AIzaSyCV_x5ibDv04ta6DRMAtqTZChXhtovFZWo",
-      authDomain: "ganttepc.firebaseapp.com",
-      projectId: "ganttepc",
-      storageBucket: "ganttepc.firebasestorage.app",
-      messagingSenderId: "486680121170",
-      appId: "1:486680121170:web:9aa50bc69f83eebb89348b"
-    }
-  };
-</script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="script.js"></script>
+    <script>
+        window.__API_CONFIG__ = {
+            token: "glpat-JfjiRCcpVzfMx3VSLofR",
+            url: "https://gitlab.4mti.com.br",
+            group: "94",
+            milestone: "Cliente) Porto Seguro - EPC",
+            firebaseConfig: {
+                apiKey: "AIzaSyCV_x5ibDv04ta6DRMAtqTZChXhtovFZWo",
+                authDomain: "ganttepc.firebaseapp.com",
+                projectId: "ganttepc",
+                storageBucket: "ganttepc.firebasestorage.app",
+                messagingSenderId: "486680121170",
+                appId: "1:486680121170:web:9aa50bc69f83eebb89348b"
+            }
+        };
+    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="script.js"></script>
 </body>
+
 </html>
