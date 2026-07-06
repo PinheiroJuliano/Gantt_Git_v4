@@ -904,3 +904,162 @@ input[type="text"], input[type="password"], input[type="date"], select {
   transition: background 0.1s;
 }
 .user-dropdown-logout:hover { background: var(--red-bg); }
+
+/* ── Admin button in dropdown ─────────────────────────────────────────────── */
+.user-dropdown-admin {
+  width: 100%; background: none; border: none;
+  padding: 7px 14px; text-align: left;
+  font-size: 12px; font-weight: 500; color: var(--blue);
+  cursor: pointer; font-family: 'IBM Plex Sans', sans-serif;
+  transition: background 0.1s;
+}
+.user-dropdown-admin:hover { background: var(--blue-bg); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN USERS MODAL
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.modal-admin {
+  width: min(600px, 95vw);
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+.admin-section {
+  margin-bottom: 20px;
+}
+.admin-section-title {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 4px 10px; border-radius: 20px;
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-bottom: 10px;
+}
+.admin-badge-pending {
+  background: var(--amber-bg); color: var(--amber-t);
+}
+.admin-badge-user {
+  background: var(--green-bg); color: var(--green-t);
+}
+
+/* ── User Card ────────────────────────────────────────────────────────────── */
+.admin-user-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 6px;
+  background: var(--bg2);
+  transition: border-color 0.15s;
+}
+.admin-user-card:hover { border-color: var(--border2); }
+.admin-user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--blue); color: #fff;
+  font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.admin-user-info { flex: 1; min-width: 0; }
+.admin-user-name {
+  font-size: 13px; font-weight: 600;
+  display: block; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.admin-user-email {
+  font-size: 10px; color: var(--text3);
+  font-family: 'IBM Plex Mono', monospace;
+  display: block; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.admin-user-projs {
+  font-size: 10px; color: var(--blue);
+  margin-top: 2px; display: block;
+}
+.admin-user-actions {
+  display: flex; gap: 5px; flex-shrink: 0;
+}
+.admin-btn-approve {
+  padding: 4px 10px; border-radius: var(--r);
+  border: 1px solid var(--green); background: var(--green-bg);
+  color: var(--green-t); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: 'IBM Plex Sans', sans-serif;
+  transition: opacity 0.1s;
+}
+.admin-btn-approve:hover { opacity: 0.8; }
+.admin-btn-projs {
+  padding: 4px 10px; border-radius: var(--r);
+  border: 1px solid var(--blue); background: var(--blue-bg);
+  color: var(--blue); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: 'IBM Plex Sans', sans-serif;
+  transition: opacity 0.1s;
+}
+.admin-btn-projs:hover { opacity: 0.8; }
+.admin-btn-revoke {
+  padding: 4px 10px; border-radius: var(--r);
+  border: 1px solid var(--border2); background: none;
+  color: var(--red); font-size: 11px; font-weight: 600;
+  cursor: pointer; font-family: 'IBM Plex Sans', sans-serif;
+  transition: background 0.1s;
+}
+.admin-btn-revoke:hover { background: var(--red-bg); }
+
+/* ── Projects sub-panel ───────────────────────────────────────────────────── */
+#adminProjectsPanel {
+  border: 1px solid var(--border2);
+  border-radius: 10px; padding: 16px;
+  background: var(--bg2);
+  animation: auth-slidein 0.25s ease;
+}
+.admin-proj-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 240px; overflow-y: auto;
+}
+.admin-proj-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg); cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.admin-proj-row:hover { background: var(--bg3); }
+.admin-proj-row.selected {
+  background: var(--blue-bg); border-color: var(--blue);
+}
+.admin-proj-row input[type="checkbox"] {
+  accent-color: var(--blue); width: 15px; height: 15px;
+  flex-shrink: 0; cursor: pointer;
+  background: none; border: none; margin: 0; padding: 0;
+}
+.admin-proj-row-name {
+  font-size: 12.5px; font-weight: 500; flex: 1;
+}
+.admin-loading {
+  text-align: center; padding: 24px;
+  color: var(--text3); font-size: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PASSWORD STRENGTH
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.pwd-strength-bar {
+  height: 4px; border-radius: 4px;
+  background: var(--bg3); margin-top: 7px;
+  overflow: hidden;
+}
+.pwd-strength-fill {
+  height: 100%; width: 0; border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+.pwd-strength-fill.weak   { width: 33%; background: var(--red); }
+.pwd-strength-fill.medium { width: 66%; background: var(--amber); }
+.pwd-strength-fill.strong { width: 100%; background: var(--green); }
+
+.pwd-checklist {
+  list-style: none; margin-top: 8px; padding: 0;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.pwd-checklist li {
+  font-size: 10.5px; color: var(--text3);
+  transition: color 0.2s;
+}
+.pwd-checklist li.ok { color: var(--green); }

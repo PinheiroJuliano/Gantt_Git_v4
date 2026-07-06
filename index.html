@@ -40,6 +40,8 @@
                     <div class="user-dropdown-name" id="userDropdownName">—</div>
                     <div class="user-dropdown-email" id="userDropdownEmail">—</div>
                     <div class="user-dropdown-divider"></div>
+                    <!-- Botão admin: visível apenas para role:admin via JS -->
+                    <button class="user-dropdown-admin" id="btnAdminUsers" onclick="openAdminUsersModal()" style="display:none">👥 Usuários</button>
                     <button class="user-dropdown-logout" onclick="doLogout()">⏻ Sair</button>
                 </div>
             </div>
@@ -337,8 +339,18 @@
                 </div>
                 <div class="login-field">
                     <label class="login-label">Senha</label>
-                    <input type="password" id="registerPassword" class="login-input" placeholder="Mínimo 6 caracteres"
-                        autocomplete="new-password" />
+                    <input type="password" id="registerPassword" class="login-input" placeholder="Mínimo 8 caracteres"
+                        autocomplete="new-password" oninput="onPasswordInput()" />
+                    <!-- Barra de força -->
+                    <div class="pwd-strength-bar" id="pwdStrengthBar">
+                        <div class="pwd-strength-fill" id="pwdStrengthFill"></div>
+                    </div>
+                    <!-- Checklist de requisitos -->
+                    <ul class="pwd-checklist" id="pwdChecklist">
+                        <li id="chkLen">✕ Mínimo 8 caracteres</li>
+                        <li id="chkUpper">✕ Ao menos 1 letra maiúscula</li>
+                        <li id="chkNum">✕ Ao menos 1 número</li>
+                    </ul>
                 </div>
                 <div class="login-field">
                     <label class="login-label">Confirmar senha</label>
@@ -361,6 +373,46 @@
             <p class="pending-msg">Seu acesso ainda não foi liberado. Um administrador irá analisar seu cadastro e
                 configurar quais projetos você poderá visualizar.<br><br>Por favor, tente novamente mais tarde.</p>
             <button class="login-btn" style="margin-top:24px" onclick="doLogout()">⏻ Sair</button>
+        </div>
+    </div>
+
+    <!-- =============================================
+     MODAL: Gestão de Usuários (Admin)
+     ============================================= -->
+    <div class="modal-backdrop" id="adminModalBackdrop" onclick="closeAdminUsersModal()" style="display:none"></div>
+    <div class="modal modal-admin" id="adminUsersModal" style="display:none">
+        <div class="modal-header">
+            <h2 class="modal-title">👥 Gestão de Usuários</h2>
+            <button class="modal-close" onclick="closeAdminUsersModal()">✕</button>
+        </div>
+        <div class="modal-form-section">
+
+            <!-- Seção: Pendentes -->
+            <div class="admin-section" id="adminSectionPending">
+                <div class="admin-section-title admin-badge-pending">⏳ Aguardando aprovação</div>
+                <div id="adminListPending">
+                    <p class="modal-empty">Nenhum usuário pendente.</p>
+                </div>
+            </div>
+
+            <!-- Seção: Usuários ativos -->
+            <div class="admin-section" id="adminSectionUsers">
+                <div class="admin-section-title admin-badge-user">✅ Usuários ativos</div>
+                <div id="adminListUsers">
+                    <p class="modal-empty">Nenhum usuário ativo.</p>
+                </div>
+            </div>
+
+            <!-- Sub-painel: Atribuição de projetos -->
+            <div id="adminProjectsPanel" style="display:none">
+                <div class="admin-section-title" style="margin-bottom:8px">📁 Projetos de <strong id="adminProjPanelUser"></strong></div>
+                <div id="adminProjCheckboxes" class="admin-proj-list"></div>
+                <div class="form-actions" style="margin-top:14px">
+                    <button class="btn" onclick="closeProjectsPanel()">Cancelar</button>
+                    <button class="btn primary" id="btnSaveProjects" onclick="saveUserProjects()">✓ Salvar projetos</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
