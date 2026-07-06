@@ -321,6 +321,9 @@
                     <input type="password" id="loginPassword" class="login-input" placeholder="••••••••"
                         autocomplete="current-password" />
                 </div>
+                <div class="login-forgot">
+                    <a href="#" id="forgotPasswordLink" onclick="openForgotPasswordModal(); return false;">Esqueci minha senha</a>
+                </div>
                 <div class="login-error" id="loginError"></div>
                 <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar</button>
             </div>
@@ -360,6 +363,27 @@
                 <div class="login-error" id="registerError"></div>
                 <button class="login-btn" id="registerBtn" onclick="doRegister()">Criar conta</button>
             </div>
+        </div>
+    </div>
+
+    <!-- =============================================
+     MODAL: Esqueci minha senha
+     ============================================= -->
+    <div class="modal-backdrop" id="forgotPasswordBackdrop" onclick="closeForgotPasswordModal()" style="display:none"></div>
+    <div class="modal modal-forgot" id="forgotPasswordModal" style="display:none">
+        <div class="modal-header">
+            <h2 class="modal-title">🔑 Redefinir senha</h2>
+            <button class="modal-close" onclick="closeForgotPasswordModal()">✕</button>
+        </div>
+        <div class="modal-form-section">
+            <p class="forgot-desc">Informe o e-mail da sua conta. Enviaremos um link para você criar uma nova senha.</p>
+            <div class="login-field">
+                <label class="login-label">E-mail</label>
+                <input type="email" id="forgotEmail" class="login-input" placeholder="seu@email.com" autocomplete="email" />
+            </div>
+            <div class="login-error" id="forgotError"></div>
+            <div class="forgot-success" id="forgotSuccess"></div>
+            <button class="login-btn" id="forgotBtn" onclick="doForgotPassword()">Enviar link de redefinição</button>
         </div>
     </div>
 

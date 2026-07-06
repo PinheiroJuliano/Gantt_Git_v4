@@ -818,6 +818,28 @@ input[type="text"], input[type="password"], input[type="date"], select {
   opacity: 0.55; cursor: not-allowed; transform: none;
 }
 
+/* ── Esqueci minha senha ──────────────────────────────────────────────────── */
+.login-forgot {
+  text-align: right; margin: -6px 0 10px;
+}
+.login-forgot a {
+  font-size: 11px; color: var(--blue); text-decoration: none;
+}
+.login-forgot a:hover { text-decoration: underline; }
+.modal-forgot {
+  width: min(400px, 94vw);
+}
+.forgot-desc {
+  font-size: 11.5px; color: var(--text2);
+  line-height: 1.5; margin-bottom: 16px;
+}
+.forgot-success {
+  font-size: 11px; color: var(--green);
+  min-height: 0; margin-bottom: 10px;
+  line-height: 1.5; display: none;
+}
+.forgot-success.show { display: block; }
+
 /* ── Pending Screen ───────────────────────────────────────────────────────── */
 #pendingScreen {
   position: fixed; inset: 0; z-index: 8500;

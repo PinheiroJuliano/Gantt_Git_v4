@@ -319,6 +319,55 @@ window.doRegister = async function() {
   }
 };
 
+/* ─── ESQUECI MINHA SENHA ────────────────────────────────────────────────── */
+
+/* Abre o modal de redefinição de senha, pré-preenchendo com o e-mail já digitado no login */
+window.openForgotPasswordModal = function() {
+  document.getElementById('forgotError').textContent   = '';
+  document.getElementById('forgotSuccess').textContent = '';
+  document.getElementById('forgotSuccess').classList.remove('show');
+  const loginEmail = document.getElementById('loginEmail')?.value.trim() || '';
+  document.getElementById('forgotEmail').value = loginEmail;
+  setBtnLoading('forgotBtn', false, 'Enviar link de redefinição');
+  document.getElementById('forgotPasswordBackdrop').style.display = '';
+  document.getElementById('forgotPasswordModal').style.display    = '';
+};
+
+window.closeForgotPasswordModal = function() {
+  document.getElementById('forgotPasswordBackdrop').style.display = 'none';
+  document.getElementById('forgotPasswordModal').style.display    = 'none';
+};
+
+/* Envia o e-mail de redefinição de senha via Firebase Auth */
+window.doForgotPassword = async function() {
+  const errEl = document.getElementById('forgotError');
+  const okEl  = document.getElementById('forgotSuccess');
+  errEl.textContent = '';
+  okEl.textContent  = '';
+  okEl.classList.remove('show');
+
+  const email = document.getElementById('forgotEmail').value.trim();
+  if (!email) { errEl.textContent = 'Informe seu e-mail.'; return; }
+
+  setBtnLoading('forgotBtn', true, 'Enviar link de redefinição');
+  try {
+    await firebase.auth().sendPasswordResetEmail(email);
+    // Mensagem genérica de sucesso (não revela se o e-mail existe ou não, por segurança)
+    okEl.textContent = 'Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha em instantes. Verifique também a caixa de spam.';
+    okEl.classList.add('show');
+  } catch(e) {
+    // auth/user-not-found também recebe mensagem genérica, para não expor quais e-mails existem
+    if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email') {
+      okEl.textContent = 'Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha em instantes. Verifique também a caixa de spam.';
+      okEl.classList.add('show');
+    } else {
+      errEl.textContent = authErrMsg(e.code);
+    }
+  } finally {
+    setBtnLoading('forgotBtn', false, 'Enviar link de redefinição');
+  }
+};
+
 /* Logout */
 window.doLogout = async function() {
   const dd = document.getElementById('userDropdown');
@@ -390,7 +439,8 @@ function adminUserCardHTML(u, type) {
   const allowedJson = JSON.stringify(u.allowedProjects || []);
 
   const actions = type === 'pending'
-    ? `<button class="admin-btn-approve" onclick="approveUser(${emailJson})">✓ Aprovar</button>`
+    ? `<button class="admin-btn-approve" onclick="approveUser(${emailJson})">✓ Aprovar</button>
+       <button class="admin-btn-revoke" onclick="rejectUser(${emailJson})">✕ Recusar</button>`
     : `<button class="admin-btn-projs" onclick="openUserProjectsPanel(${emailJson}, ${allowedJson})">📁 Projetos</button>
        <button class="admin-btn-revoke" onclick="revokeUser(${emailJson})">Revogar</button>`;
 
@@ -412,6 +462,20 @@ window.approveUser = async function(email) {
     await db.collection('gantt').doc('users').collection('items').doc(email).update({ role: 'user' });
     window.openAdminUsersModal(); // recarrega a lista
   } catch(e) { console.error('Erro ao aprovar usuário:', e); alert('Erro ao aprovar usuário.'); }
+};
+
+/* Recusa um cadastro pendente: remove o perfil do Firestore.
+   Obs.: isso NÃO apaga a conta de autenticação (Firebase Auth) do usuário —
+   apagar contas de outros usuários exige o Admin SDK (backend/Cloud Function),
+   o que não é possível a partir do app cliente. Se o usuário tentar logar de
+   novo, o perfil será recriado automaticamente como "pending" e precisará ser
+   analisado novamente. */
+window.rejectUser = async function(email) {
+  if (!confirm(`Recusar o cadastro de ${email}? O usuário poderá se cadastrar novamente depois.`)) return;
+  try {
+    await db.collection('gantt').doc('users').collection('items').doc(email).delete();
+    window.openAdminUsersModal();
+  } catch(e) { console.error('Erro ao recusar usuário:', e); alert('Erro ao recusar usuário.'); }
 };
 
 /* Revoga o acesso de um usuário: role user → pending + limpa projetos */
