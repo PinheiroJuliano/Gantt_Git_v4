@@ -230,6 +230,9 @@ function updateUserWidget(user, profile) {
   const emailEl = document.getElementById('userDropdownEmail');
   if (nameEl)  nameEl.textContent  = name;
   if (emailEl) emailEl.textContent = user.email;
+  // Mostra botão de admin apenas para role:admin
+  const adminBtn = document.getElementById('btnAdminUsers');
+  if (adminBtn) adminBtn.style.display = (profile?.role === 'admin') ? '' : 'none';
   widget.style.display = '';
 }
 
@@ -262,6 +265,35 @@ window.doLogin = async function() {
   }
 };
 
+/* Validação de senha em tempo real */
+function checkPasswordRules(pwd) {
+  return {
+    len:   pwd.length >= 8,
+    upper: /[A-Z]/.test(pwd),
+    num:   /[0-9]/.test(pwd),
+  };
+}
+
+window.onPasswordInput = function() {
+  const pwd    = document.getElementById('registerPassword')?.value || '';
+  const rules  = checkPasswordRules(pwd);
+  const fill   = document.getElementById('pwdStrengthFill');
+  const chkLen   = document.getElementById('chkLen');
+  const chkUpper = document.getElementById('chkUpper');
+  const chkNum   = document.getElementById('chkNum');
+
+  // Atualiza checklist
+  if (chkLen)   { chkLen.classList.toggle('ok', rules.len);   chkLen.textContent   = (rules.len   ? '✓' : '✕') + ' Mínimo 8 caracteres'; }
+  if (chkUpper) { chkUpper.classList.toggle('ok', rules.upper); chkUpper.textContent = (rules.upper ? '✓' : '✕') + ' Ao menos 1 letra maiúscula'; }
+  if (chkNum)   { chkNum.classList.toggle('ok', rules.num);   chkNum.textContent   = (rules.num   ? '✓' : '✕') + ' Ao menos 1 número'; }
+
+  // Barra de força
+  if (fill) {
+    const score = (rules.len ? 1 : 0) + (rules.upper ? 1 : 0) + (rules.num ? 1 : 0);
+    fill.className = 'pwd-strength-fill ' + (score === 3 ? 'strong' : score >= 2 ? 'medium' : pwd.length ? 'weak' : '');
+  }
+};
+
 /* Cadastro de novo usuário */
 window.doRegister = async function() {
   setRegisterError('');
@@ -271,7 +303,10 @@ window.doRegister = async function() {
   const confirm  = document.getElementById('registerConfirm').value;
   if (!name || !email || !password || !confirm) { setRegisterError('Preencha todos os campos.'); return; }
   if (password !== confirm) { setRegisterError('As senhas não coincidem.'); return; }
-  if (password.length < 6)  { setRegisterError('A senha deve ter ao menos 6 caracteres.'); return; }
+  const rules = checkPasswordRules(password);
+  if (!rules.len)   { setRegisterError('A senha deve ter ao menos 8 caracteres.'); return; }
+  if (!rules.upper) { setRegisterError('A senha deve conter ao menos uma letra maiúscula.'); return; }
+  if (!rules.num)   { setRegisterError('A senha deve conter ao menos um número.'); return; }
   setBtnLoading('registerBtn', true, 'Criar conta');
   try {
     const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
@@ -294,6 +329,158 @@ window.doLogout = async function() {
   internalMilestones = []; allIssues = []; currentUser = null; userProfile = null;
   document.getElementById('userWidget').style.display = 'none';
   showLoginUI();
+};
+
+/* ─── ADMIN USERS PANEL ──────────────────────────────────────────────────────── */
+
+let _adminProjectsTargetEmail  = null;  // e-mail do usuário cujos projetos estão sendo editados
+
+/* Abre o modal e carrega os usuários do Firestore */
+window.openAdminUsersModal = async function() {
+  if (userProfile?.role !== 'admin') return;  // segurança extra
+  const dd = document.getElementById('userDropdown');
+  if (dd) dd.classList.remove('open');
+  document.getElementById('adminModalBackdrop').style.display = '';
+  document.getElementById('adminUsersModal').style.display    = '';
+  document.getElementById('adminProjectsPanel').style.display = 'none';
+  document.getElementById('adminListPending').innerHTML = '<p class="admin-loading"><span class="spinner"></span> Carregando…</p>';
+  document.getElementById('adminListUsers').innerHTML   = '<p class="admin-loading"><span class="spinner"></span> Carregando…</p>';
+
+  try {
+    const snap = await db.collection('gantt').doc('users').collection('items').get();
+    const users = snap.docs.map(d => d.data());
+    renderAdminUsers(users);
+  } catch(e) {
+    document.getElementById('adminListPending').innerHTML = '<p class="modal-empty">Erro ao carregar usuários.</p>';
+    document.getElementById('adminListUsers').innerHTML   = '';
+    console.error('Admin: erro ao carregar usuários:', e);
+  }
+};
+
+window.closeAdminUsersModal = function() {
+  document.getElementById('adminModalBackdrop').style.display = 'none';
+  document.getElementById('adminUsersModal').style.display    = 'none';
+  _adminProjectsTargetEmail = null;
+};
+
+/* Renderiza as listas de pendentes e ativos */
+function renderAdminUsers(users) {
+  const pending = users.filter(u => u.role === 'pending');
+  const active  = users.filter(u => u.role === 'user');
+
+  const pendingEl = document.getElementById('adminListPending');
+  const activeEl  = document.getElementById('adminListUsers');
+
+  pendingEl.innerHTML = pending.length
+    ? pending.map(u => adminUserCardHTML(u, 'pending')).join('')
+    : '<p class="modal-empty">Nenhum usuário pendente.</p>';
+
+  activeEl.innerHTML  = active.length
+    ? active.map(u => adminUserCardHTML(u, 'user')).join('')
+    : '<p class="modal-empty">Nenhum usuário ativo.</p>';
+}
+
+/* Gera o HTML de um card de usuário */
+function adminUserCardHTML(u, type) {
+  const letter   = (u.displayName || u.email).charAt(0).toUpperCase();
+  const projCount = Array.isArray(u.allowedProjects) ? u.allowedProjects.length : 0;
+  const projLabel = projCount === 0 ? 'Sem projetos atribuídos' : `${projCount} projeto(s) atribuído(s)`;
+  const emailSafe = CSS.escape(u.email);
+  const emailJson = JSON.stringify(u.email);
+  const allowedJson = JSON.stringify(u.allowedProjects || []);
+
+  const actions = type === 'pending'
+    ? `<button class="admin-btn-approve" onclick="approveUser(${emailJson})">✓ Aprovar</button>`
+    : `<button class="admin-btn-projs" onclick="openUserProjectsPanel(${emailJson}, ${allowedJson})">📁 Projetos</button>
+       <button class="admin-btn-revoke" onclick="revokeUser(${emailJson})">Revogar</button>`;
+
+  return `
+    <div class="admin-user-card" id="ucard-${u.email.replace('@','_').replace('.','_')}">
+      <div class="admin-user-avatar">${letter}</div>
+      <div class="admin-user-info">
+        <span class="admin-user-name">${u.displayName || '—'}</span>
+        <span class="admin-user-email">${u.email}</span>
+        ${type === 'user' ? `<span class="admin-user-projs">${projLabel}</span>` : ''}
+      </div>
+      <div class="admin-user-actions">${actions}</div>
+    </div>`;
+}
+
+/* Aprova um usuário: role pending → user */
+window.approveUser = async function(email) {
+  try {
+    await db.collection('gantt').doc('users').collection('items').doc(email).update({ role: 'user' });
+    window.openAdminUsersModal(); // recarrega a lista
+  } catch(e) { console.error('Erro ao aprovar usuário:', e); alert('Erro ao aprovar usuário.'); }
+};
+
+/* Revoga o acesso de um usuário: role user → pending + limpa projetos */
+window.revokeUser = async function(email) {
+  if (!confirm(`Revogar acesso de ${email}?`)) return;
+  try {
+    await db.collection('gantt').doc('users').collection('items').doc(email)
+      .update({ role: 'pending', allowedProjects: [] });
+    window.openAdminUsersModal();
+  } catch(e) { console.error('Erro ao revogar acesso:', e); alert('Erro ao revogar acesso.'); }
+};
+
+/* Abre o sub-painel de atribuição de projetos */
+window.openUserProjectsPanel = function(email, currentProjects) {
+  _adminProjectsTargetEmail = email;
+  const panel  = document.getElementById('adminProjectsPanel');
+  const title  = document.getElementById('adminProjPanelUser');
+  const listEl = document.getElementById('adminProjCheckboxes');
+
+  title.textContent = email;
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  if (!projects.length) {
+    listEl.innerHTML = '<p class="modal-empty">Nenhum projeto cadastrado no sistema.</p>';
+    return;
+  }
+
+  listEl.innerHTML = projects.map(p => {
+    const checked  = currentProjects.includes(p.id);
+    return `
+      <label class="admin-proj-row${checked ? ' selected' : ''}" id="projrow-${p.id}">
+        <input type="checkbox" value="${p.id}" ${checked ? 'checked' : ''}
+          onchange="toggleProjRow(this)" />
+        <span class="admin-proj-row-name">${p.name}</span>
+      </label>`;
+  }).join('');
+};
+
+/* Atualiza o visual do checkbox ao marcar/desmarcar */
+window.toggleProjRow = function(cb) {
+  const row = cb.closest('.admin-proj-row');
+  if (row) row.classList.toggle('selected', cb.checked);
+};
+
+window.closeProjectsPanel = function() {
+  document.getElementById('adminProjectsPanel').style.display = 'none';
+  _adminProjectsTargetEmail = null;
+};
+
+/* Salva os projetos atribuídos ao usuário no Firestore */
+window.saveUserProjects = async function() {
+  if (!_adminProjectsTargetEmail) return;
+  const checkboxes  = document.querySelectorAll('#adminProjCheckboxes input[type="checkbox"]');
+  const selectedIds = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
+  const btn         = document.getElementById('btnSaveProjects');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
+  try {
+    await db.collection('gantt').doc('users').collection('items')
+      .doc(_adminProjectsTargetEmail)
+      .update({ allowedProjects: selectedIds });
+    closeProjectsPanel();
+    window.openAdminUsersModal(); // atualiza o contador de projetos
+  } catch(e) {
+    console.error('Erro ao salvar projetos:', e);
+    alert('Erro ao salvar projetos.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Salvar projetos'; }
+  }
 };
 
 /* ─── CONFIG (compatibilidade) ───────────────────────────────────────────── */
