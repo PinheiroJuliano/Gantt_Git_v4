@@ -417,6 +417,10 @@ function renderAdminUsers(users) {
   const pending = users.filter(u => u.role === 'pending');
   const active  = users.filter(u => u.role === 'user');
 
+  // Atualiza o cache usado pela delegação de eventos (data-action/data-email)
+  _adminUsersCache = {};
+  users.forEach(u => { _adminUsersCache[u.email] = u; });
+
   const pendingEl = document.getElementById('adminListPending');
   const activeEl  = document.getElementById('adminListUsers');
 
@@ -429,20 +433,29 @@ function renderAdminUsers(users) {
     : '<p class="modal-empty">Nenhum usuário ativo.</p>';
 }
 
+/* Cache dos usuários carregados, indexado por e-mail — evita ter que
+   serializar objetos/arrays dentro de atributos HTML (onclick="...") */
+let _adminUsersCache = {};
+
+/* Escapa texto para uso seguro dentro de um atributo HTML entre aspas duplas */
+function escAttr(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /* Gera o HTML de um card de usuário */
 function adminUserCardHTML(u, type) {
   const letter   = (u.displayName || u.email).charAt(0).toUpperCase();
   const projCount = Array.isArray(u.allowedProjects) ? u.allowedProjects.length : 0;
   const projLabel = projCount === 0 ? 'Sem projetos atribuídos' : `${projCount} projeto(s) atribuído(s)`;
-  const emailSafe = CSS.escape(u.email);
-  const emailJson = JSON.stringify(u.email);
-  const allowedJson = JSON.stringify(u.allowedProjects || []);
+  const emailAttr = escAttr(u.email);
 
   const actions = type === 'pending'
-    ? `<button class="admin-btn-approve" onclick="approveUser(${emailJson})">✓ Aprovar</button>
-       <button class="admin-btn-revoke" onclick="rejectUser(${emailJson})">✕ Recusar</button>`
-    : `<button class="admin-btn-projs" onclick="openUserProjectsPanel(${emailJson}, ${allowedJson})">📁 Projetos</button>
-       <button class="admin-btn-revoke" onclick="revokeUser(${emailJson})">Revogar</button>`;
+    ? `<button class="admin-btn-approve" data-action="approve" data-email="${emailAttr}">✓ Aprovar</button>
+       <button class="admin-btn-revoke" data-action="reject" data-email="${emailAttr}">✕ Recusar</button>`
+    : `<button class="admin-btn-projs" data-action="projects" data-email="${emailAttr}">📁 Projetos</button>
+       <button class="admin-btn-revoke" data-action="revoke" data-email="${emailAttr}">Revogar</button>`;
 
   return `
     <div class="admin-user-card" id="ucard-${u.email.replace('@','_').replace('.','_')}">
@@ -455,6 +468,22 @@ function adminUserCardHTML(u, type) {
       <div class="admin-user-actions">${actions}</div>
     </div>`;
 }
+
+/* Delegação de eventos: os cards são recriados a cada renderAdminUsers(),
+   então usamos um único listener fixo no container, ao invés de onclick
+   inline (que quebrava com e-mails/arrays contendo aspas). */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action][data-email]');
+  if (!btn) return;
+  const email = btn.dataset.email;
+  const user  = _adminUsersCache[email];
+  switch (btn.dataset.action) {
+    case 'approve':  window.approveUser(email); break;
+    case 'reject':   window.rejectUser(email); break;
+    case 'revoke':   window.revokeUser(email); break;
+    case 'projects': window.openUserProjectsPanel(email, user?.allowedProjects || []); break;
+  }
+});
 
 /* Aprova um usuário: role pending → user */
 window.approveUser = async function(email) {

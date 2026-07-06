@@ -829,6 +829,10 @@ input[type="text"], input[type="password"], input[type="date"], select {
 .modal-forgot {
   width: min(400px, 94vw);
 }
+/* Precisa ficar ACIMA do #loginScreen (z-index: 9000), já que este modal
+   é aberto justamente a partir da tela de login, antes de haver sessão. */
+#forgotPasswordBackdrop { z-index: 9100; }
+#forgotPasswordModal    { z-index: 9101; }
 .forgot-desc {
   font-size: 11.5px; color: var(--text2);
   line-height: 1.5; margin-bottom: 16px;
